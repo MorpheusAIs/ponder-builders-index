@@ -1,0 +1,173 @@
+# Kubernetes deployment for Ponder Builders indexer
+# Implements database views pattern for zero-downtime deployments
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: morpheusai-indexers
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ponder-builders-config
+  namespace: morpheusai-indexers
+data:
+  PONDER_LOG_LEVEL: "info"
+  PONDER_PORT: "42069"
+  NODE_ENV: "production"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ponder-builders-secrets
+  namespace: morpheusai-indexers
+type: Opaque
+stringData:
+  DATABASE_URL: postgresql://ponder:PASSWORD@postgres:5432/ponder_builders
+  PONDER_RPC_URL_42161: https://arb-mainnet.g.alchemy.com/v2/YOUR_KEY
+  PONDER_RPC_URL_8453: https://base-mainnet.g.alchemy.com/v2/YOUR_KEY
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ponder-builders
+  namespace: morpheusai-indexers
+  labels:
+    app: ponder-builders
+    version: v1
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: ponder-builders
+  template:
+    metadata:
+      labels:
+        app: ponder-builders
+        version: v1
+    spec:
+      containers:
+      - name: ponder-builders
+        image: morpheusai/ponder-builders:latest
+        ports:
+        - containerPort: 42069
+          name: http
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: ponder-builders-secrets
+              key: DATABASE_URL
+        - name: PONDER_RPC_URL_42161
+          valueFrom:
+            secretKeyRef:
+              name: ponder-builders-secrets
+              key: PONDER_RPC_URL_42161
+        - name: PONDER_RPC_URL_8453
+          valueFrom:
+            secretKeyRef:
+              name: ponder-builders-secrets
+              key: PONDER_RPC_URL_8453
+        envFrom:
+        - configMapRef:
+            name: ponder-builders-config
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 42069
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 42069
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        # For zero-downtime deployments with database views
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 15"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ponder-builders-service
+  namespace: morpheusai-indexers
+  labels:
+    app: ponder-builders
+spec:
+  selector:
+    app: ponder-builders
+  ports:
+  - port: 80
+    targetPort: 42069
+    protocol: TCP
+    name: http
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ponder-builders-ingress
+  namespace: morpheusai-indexers
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Content-Type, Authorization"
+spec:
+  rules:
+  - host: builders-api.morpheusai.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: ponder-builders-service
+            port:
+              number: 80
+  tls:
+  - hosts:
+    - builders-api.morpheusai.com
+    secretName: builders-api-tls
+---
+# HorizontalPodAutoscaler for automatic scaling
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ponder-builders-hpa
+  namespace: morpheusai-indexers
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ponder-builders
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80

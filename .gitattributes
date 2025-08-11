@@ -1,0 +1,52 @@
+# Set default behavior for all files
+* text=auto eol=lf
+
+# Explicitly set text files with LF line endings
+*.ts text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+*.txt text eol=lf
+*.sql text eol=lf
+*.graphql text eol=lf
+
+# Shell scripts should have LF line endings
+*.sh text eol=lf
+
+# Configuration files
+.env* text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+Dockerfile* text eol=lf
+docker-compose*.yml text eol=lf
+
+# Package manager files
+package.json text eol=lf
+package-lock.json text eol=lf
+pnpm-lock.yaml text eol=lf
+tsconfig.json text eol=lf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg binary
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+
+# Generated files (treat as binary to avoid conflicts)
+pnpm-lock.yaml binary
+schema.graphql linguist-generated=true
+supergraph-schema.graphql linguist-generated=true
+
+# Language-specific settings for GitHub
+*.ts linguist-language=TypeScript
+*.js linguist-language=JavaScript
+*.md linguist-documentation=true
+docs/* linguist-documentation=true
