@@ -72,7 +72,7 @@ Note: Other ABIs in `app/abi/` (e.g., `DepositPool.json`, `DistributorV2.json`, 
   - Chain ID: 8453
 
 - **Arbitrum mainnet**
-  - Endpoint: `https://api.studio.thegraph.com/query/73688/lumerin-node/version/latest`
+  - Endpoint: `https://api.studio.thegraph.com/query/73688/morpheus-mainnet-arbitrum/version/latest`
   - Chain ID: 42161
 
 **Configuration files:**
@@ -178,7 +178,7 @@ import BuildersAbi from '@/app/abi/Builders.json';
 **GraphQL endpoints configuration:**
 ```lib/apollo-client.ts
 const NETWORK_ENDPOINTS = {
-  Arbitrum: 'https://api.studio.thegraph.com/query/73688/lumerin-node/version/latest',
+  Arbitrum: 'https://api.studio.thegraph.com/query/73688/morpheus-mainnet-arbitrum/version/latest',
   Base: 'https://subgraph.satsuma-prod.com/8675f21b07ed/9iqb9f4qcmhosiruyg763--465704/morpheus-mainnet-base/api',
 };
 ```
