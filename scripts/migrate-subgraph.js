@@ -192,5 +192,5 @@ console.log('• Ponder GraphQL API: http://localhost:42069/graphql');
 console.log('• Ponder SQL API: http://localhost:42069/sql');  
 console.log('• Documentation: https://ponder.sh/docs');
 console.log('• Existing subgraphs:');
-console.log('  - Arbitrum: https://api.studio.thegraph.com/query/73688/lumerin-node/version/latest');
+console.log('  - Arbitrum: https://api.studio.thegraph.com/query/73688/morpheus-mainnet-arbitrum/version/latest');
 console.log('  - Base: https://subgraph.satsuma-prod.com/8675f21b07ed/9iqb9f4qcmhosiruyg763--465704/morpheus-mainnet-base/api');
