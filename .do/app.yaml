@@ -27,7 +27,6 @@ services:
     corepack enable
     pnpm install --frozen-lockfile
     pnpm build --filter=packages/shared-abis
-    pnpm build --filter=apps/ponder-builders
   run_command: |
     cd apps/ponder-builders
     pnpm start
@@ -71,7 +70,6 @@ services:
     corepack enable
     pnpm install --frozen-lockfile
     pnpm build --filter=packages/shared-abis
-    pnpm build --filter=apps/ponder-capital
   run_command: |
     cd apps/ponder-capital
     pnpm start
@@ -114,7 +112,7 @@ services:
   build_command: |
     corepack enable
     pnpm install --frozen-lockfile
-    pnpm build --filter=gateway/apollo-federation
+    cd gateway/apollo-federation && pnpm build
   run_command: |
     cd gateway/apollo-federation
     pnpm start
@@ -143,43 +141,12 @@ services:
   - key: APOLLO_GRAPH_VARIANT
     value: production
 
-# Read-only SQL API Service (Optional scaling service)
-- name: ponder-sql-api
-  source_dir: apps/ponder-builders  # Can serve both builders and capital
-  github:
-    repo: BowTiedSwan/ponder-builders-index
-    branch: main
-  build_command: |
-    cd /workspace
-    corepack enable
-    pnpm install --frozen-lockfile
-    pnpm build --filter=packages/shared-abis
-    pnpm build --filter=apps/ponder-builders
-  run_command: npx ponder serve --schema=ponder_builders_latest
-  environment_slug: node-js
-  instance_count: 1
-  instance_size_slug: basic-xxs  # 0.5 vCPU, 0.5 GB RAM
-  http_port: 42069
-  routes:
-  - path: /sql
-    preserve_path_prefix: true
-  health_check:
-    http_path: /health
-    initial_delay_seconds: 10
-    period_seconds: 10
-    timeout_seconds: 5
-    success_threshold: 1
-    failure_threshold: 3
-  envs:
-  - key: NODE_ENV
-    value: production
-  - key: PONDER_LOG_LEVEL
-    value: info
+# Removed redundant SQL API - main services serve both GraphQL and SQL
 
 # Jobs for database maintenance
 jobs:
 - name: db-create-views-builders
-  source_dir: apps/ponder-builders
+  source_dir: /  # Use workspace root for pnpm
   github:
     repo: BowTiedSwan/ponder-builders-index
     branch: main
@@ -187,9 +154,8 @@ jobs:
     cd /workspace
     corepack enable
     pnpm install --frozen-lockfile
-    pnpm build --filter=packages/shared-abis
-    pnpm build --filter=apps/ponder-builders
-  run_command: npx ponder db create-views --schema=ponder_builders_${APP_DOMAIN_HASH} --views-schema=ponder_builders_latest
+    cd packages/shared-abis && pnpm build
+  run_command: cd apps/ponder-builders && pnpm exec ponder db create-views --schema=ponder_builders_${APP_DOMAIN_HASH} --views-schema=ponder_builders_latest
   environment_slug: node-js
   instance_size_slug: basic-xxs
   kind: POST_DEPLOY
@@ -198,7 +164,7 @@ jobs:
     value: production
 
 - name: db-create-views-capital
-  source_dir: apps/ponder-capital
+  source_dir: /  # Use workspace root for pnpm
   github:
     repo: BowTiedSwan/ponder-builders-index
     branch: main
@@ -206,9 +172,8 @@ jobs:
     cd /workspace
     corepack enable
     pnpm install --frozen-lockfile
-    pnpm build --filter=packages/shared-abis
-    pnpm build --filter=apps/ponder-capital
-  run_command: npx ponder db create-views --schema=ponder_capital_${APP_DOMAIN_HASH} --views-schema=ponder_capital_latest
+    cd packages/shared-abis && pnpm build
+  run_command: cd apps/ponder-capital && pnpm exec ponder db create-views --schema=ponder_capital_${APP_DOMAIN_HASH} --views-schema=ponder_capital_latest
   environment_slug: node-js
   instance_size_slug: basic-xxs
   kind: POST_DEPLOY

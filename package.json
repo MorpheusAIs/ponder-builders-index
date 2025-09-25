@@ -10,7 +10,7 @@
   ],
   "scripts": {
     "dev": "concurrently \"npm run dev --workspace=apps/ponder-builders\" \"npm run dev --workspace=gateway/apollo-federation\"",
-    "build": "npm run build --workspaces",
+    "build": "pnpm build --filter=packages/shared-abis && pnpm build --filter=gateway/apollo-federation",
     "test": "npm run test --workspaces",
     "lint": "npm run lint --workspaces",
     "setup": "./scripts/setup.sh",
