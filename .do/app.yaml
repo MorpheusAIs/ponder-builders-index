@@ -33,7 +33,7 @@ services:
   environment_slug: node-js
   instance_count: 1
   instance_size_slug: professional-xs  # 1 vCPU, 1 GB RAM
-  http_port: 42069
+  http_port: 3000
   routes:
   - path: /builders
     preserve_path_prefix: true
@@ -76,7 +76,7 @@ services:
   environment_slug: node-js
   instance_count: 1
   instance_size_slug: professional-xs  # 1 vCPU, 1 GB RAM
-  http_port: 42069
+  http_port: 3000
   routes:
   - path: /capital
     preserve_path_prefix: true
