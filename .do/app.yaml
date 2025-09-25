@@ -26,7 +26,7 @@ services:
   build_command: |
     corepack enable
     pnpm install --frozen-lockfile
-    pnpm build --filter=packages/shared-abis
+    cd packages/shared-abis && pnpm build
   run_command: |
     cd apps/ponder-builders
     pnpm start
@@ -69,7 +69,7 @@ services:
   build_command: |
     corepack enable
     pnpm install --frozen-lockfile
-    pnpm build --filter=packages/shared-abis
+    cd packages/shared-abis && pnpm build
   run_command: |
     cd apps/ponder-capital
     pnpm start
