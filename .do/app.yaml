@@ -19,16 +19,17 @@ services:
 
 # Ponder Builders Service - Handles Arbitrum & Base chains
 - name: ponder-builders
-  source_dir: apps/ponder-builders
+  source_dir: /
   github:
-    repo: MorpheusAIs/ponder-builders-index
+    repo: BowTiedSwan/ponder-builders-index
     branch: main
   build_command: |
-    cd /workspace
     npm install
     npm run build --workspace=packages/shared-abis
     npm run build --workspace=apps/ponder-builders
-  run_command: npm run start --workspace=apps/ponder-builders
+  run_command: |
+    cd apps/ponder-builders
+    npm run start
   environment_slug: node-js
   instance_count: 1
   instance_size_slug: professional-xs  # 1 vCPU, 1 GB RAM
@@ -61,16 +62,17 @@ services:
 
 # Ponder Capital Service - Handles Ethereum mainnet & Arbitrum capital flows
 - name: ponder-capital
-  source_dir: apps/ponder-capital
+  source_dir: /
   github:
-    repo: MorpheusAIs/ponder-builders-index
+    repo: BowTiedSwan/ponder-builders-index
     branch: main
   build_command: |
-    cd /workspace
     npm install
     npm run build --workspace=packages/shared-abis
     npm run build --workspace=apps/ponder-capital
-  run_command: npm run start --workspace=apps/ponder-capital
+  run_command: |
+    cd apps/ponder-capital
+    npm run start
   environment_slug: node-js
   instance_count: 1
   instance_size_slug: professional-xs  # 1 vCPU, 1 GB RAM
@@ -103,15 +105,16 @@ services:
 
 # Apollo Federation Gateway - GraphQL API aggregation
 - name: apollo-gateway
-  source_dir: gateway/apollo-federation
+  source_dir: /
   github:
-    repo: MorpheusAIs/ponder-builders-index
+    repo: BowTiedSwan/ponder-builders-index
     branch: main
   build_command: |
-    cd /workspace
     npm install
     npm run build --workspace=gateway/apollo-federation
-  run_command: npm run start --workspace=gateway/apollo-federation
+  run_command: |
+    cd gateway/apollo-federation
+    npm run start
   environment_slug: node-js
   instance_count: 1
   instance_size_slug: basic-xxs  # 0.5 vCPU, 0.5 GB RAM
@@ -141,7 +144,7 @@ services:
 - name: ponder-sql-api
   source_dir: apps/ponder-builders  # Can serve both builders and capital
   github:
-    repo: MorpheusAIs/ponder-builders-index
+    repo: BowTiedSwan/ponder-builders-index
     branch: main
   build_command: |
     cd /workspace
@@ -174,7 +177,7 @@ jobs:
 - name: db-create-views-builders
   source_dir: apps/ponder-builders
   github:
-    repo: MorpheusAIs/ponder-builders-index
+    repo: BowTiedSwan/ponder-builders-index
     branch: main
   build_command: |
     cd /workspace
@@ -192,7 +195,7 @@ jobs:
 - name: db-create-views-capital
   source_dir: apps/ponder-capital
   github:
-    repo: MorpheusAIs/ponder-builders-index
+    repo: BowTiedSwan/ponder-builders-index
     branch: main
   build_command: |
     cd /workspace
@@ -212,7 +215,7 @@ static_sites:
 - name: docs
   source_dir: docs
   github:
-    repo: MorpheusAIs/ponder-builders-index
+    repo: BowTiedSwan/ponder-builders-index
     branch: main
   build_command: |
     echo "Building static documentation site"

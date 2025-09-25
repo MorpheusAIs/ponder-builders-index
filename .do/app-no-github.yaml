@@ -1,0 +1,100 @@
+name: morpheusai-ponder-monorepo
+region: nyc1
+
+alerts:
+- rule: DEPLOYMENT_FAILED
+- rule: DOMAIN_FAILED
+
+databases:
+- cluster_name: morpheusai-ponder-postgres
+  db_name: ponder_production
+  db_user: ponder_user
+  engine: PG
+  name: ponder-db
+  production: true
+  version: "15"
+
+services:
+# PostgreSQL database connection info is automatically injected as DATABASE_URL
+
+# Ponder Builders Service - Handles Arbitrum & Base chains
+- name: ponder-builders
+  source_dir: /
+  dockerfile_path: apps/ponder-builders/Dockerfile.production
+  build_command: |
+    npm install
+    npm run build --workspace=packages/shared-abis
+    npm run build --workspace=apps/ponder-builders
+  run_command: |
+    cd apps/ponder-builders
+    npm run start
+  environment_slug: node-js
+  instance_count: 1
+  instance_size_slug: professional-xs
+  http_port: 42069
+  routes:
+  - path: /builders
+    preserve_path_prefix: true
+  health_check:
+    http_path: /health
+    initial_delay_seconds: 30
+    period_seconds: 10
+    timeout_seconds: 5
+    success_threshold: 1
+    failure_threshold: 3
+  envs:
+  - key: NODE_ENV
+    value: production
+  - key: DATABASE_SCHEMA
+    value: ponder_builders_${APP_DOMAIN_HASH}
+  - key: VIEWS_SCHEMA
+    value: ponder_builders_latest
+  - key: PONDER_LOG_LEVEL
+    value: info
+  - key: PONDER_RPC_URL_42161
+    value: ${ARBITRUM_RPC_URL}
+    type: SECRET
+  - key: PONDER_RPC_URL_8453
+    value: ${BASE_RPC_URL}
+    type: SECRET
+
+# Ponder Capital Service - Handles Ethereum mainnet & Arbitrum capital flows
+- name: ponder-capital
+  source_dir: /
+  dockerfile_path: apps/ponder-capital/Dockerfile.production
+  build_command: |
+    npm install
+    npm run build --workspace=packages/shared-abis
+    npm run build --workspace=apps/ponder-capital
+  run_command: |
+    cd apps/ponder-capital
+    npm run start
+  environment_slug: node-js
+  instance_count: 1
+  instance_size_slug: professional-xs
+  http_port: 42069
+  routes:
+  - path: /capital
+    preserve_path_prefix: true
+  health_check:
+    http_path: /health
+    initial_delay_seconds: 60
+    period_seconds: 10
+    timeout_seconds: 5
+    success_threshold: 1
+    failure_threshold: 3
+  envs:
+  - key: NODE_ENV
+    value: production
+  - key: DATABASE_SCHEMA
+    value: ponder_capital_${APP_DOMAIN_HASH}
+  - key: VIEWS_SCHEMA
+    value: ponder_capital_latest
+  - key: PONDER_LOG_LEVEL
+    value: info
+  - key: PONDER_RPC_URL_1
+    value: ${ETHEREUM_RPC_URL}
+    type: SECRET
+  - key: PONDER_RPC_URL_42161
+    value: ${ARBITRUM_RPC_URL}
+    type: SECRET
