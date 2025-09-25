@@ -1,0 +1,114 @@
+# Alertmanager Configuration for Ponder Services
+# Configure notification routing and integrations
+
+global:
+  # SMTP configuration for email alerts
+  smtp_smarthost: 'localhost:587'
+  smtp_from: 'alerts@morpheusai.io'
+  smtp_require_tls: true
+
+# Templates for alert notifications
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# The root route configuration
+route:
+  group_by: ['alertname', 'service', 'severity']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 4h
+  receiver: 'default'
+  
+  # Route specific alerts to different receivers
+  routes:
+    # Critical alerts - immediate notification
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      group_wait: 1s
+      group_interval: 5m
+      repeat_interval: 1h
+      
+    # Blockchain indexing team alerts
+    - match:
+        team: blockchain-indexing
+      receiver: 'indexing-team'
+      
+    # API/Gateway alerts
+    - match:
+        team: api
+      receiver: 'api-team'
+      
+    # Infrastructure alerts
+    - match:
+        team: infrastructure
+      receiver: 'infrastructure-team'
+
+# Notification receivers
+receivers:
+  - name: 'default'
+    # Default webhook for general alerts
+    webhook_configs:
+      - url: 'http://localhost:9094/webhook'
+        title: 'Ponder Alert: {{ .GroupLabels.alertname }}'
+        
+  - name: 'critical-alerts'
+    # Email for critical alerts
+    email_configs:
+      - to: 'oncall@morpheusai.io'
+        subject: '🚨 CRITICAL: {{ .GroupLabels.alertname }}'
+        body: |
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Severity: {{ .Labels.severity }}
+          Service: {{ .Labels.job }}
+          Time: {{ .StartsAt.Format "2006-01-02 15:04:05 MST" }}
+          {{ end }}
+          
+    # Slack integration for critical alerts (configure webhook URL)
+    slack_configs:
+      - api_url: 'YOUR_SLACK_WEBHOOK_URL'
+        channel: '#alerts-critical'
+        title: '🚨 Critical Alert: {{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Service:* {{ .Labels.job }}
+          *Description:* {{ .Annotations.description }}
+          {{ end }}
+        color: danger
+        
+  - name: 'indexing-team'
+    email_configs:
+      - to: 'indexing-team@morpheusai.io'
+        subject: 'Ponder Indexing Alert: {{ .GroupLabels.alertname }}'
+        
+  - name: 'api-team'
+    email_configs:
+      - to: 'api-team@morpheusai.io'
+        subject: 'Ponder API Alert: {{ .GroupLabels.alertname }}'
+        
+  - name: 'infrastructure-team'
+    email_configs:
+      - to: 'infrastructure@morpheusai.io'
+        subject: 'Infrastructure Alert: {{ .GroupLabels.alertname }}'
+
+# Inhibition rules to prevent spam
+inhibit_rules:
+  # Inhibit info alerts when critical alerts are firing
+  - source_matchers:
+      - severity="critical"
+    target_matchers:
+      - severity="info"
+    equal: ['service', 'instance']
+    
+  # Inhibit warning alerts when critical alerts are firing for the same service
+  - source_matchers:
+      - severity="critical"
+    target_matchers:
+      - severity="warning"
+    equal: ['job']
+
+# Mute specific alerts during maintenance windows
+# You can add time-based silences here or via the Alertmanager UI

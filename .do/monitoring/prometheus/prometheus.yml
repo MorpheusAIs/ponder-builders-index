@@ -1,0 +1,159 @@
+# Prometheus Configuration for Ponder Blockchain Indexers
+# Monitoring Ponder Builders, Capital, and Subnets services
+
+global:
+  scrape_interval: 15s      # Scrape targets every 15 seconds
+  evaluation_interval: 15s  # Evaluate rules every 15 seconds
+  scrape_timeout: 10s
+  
+  # Attach these labels to any time series or alerts when communicating with
+  # external systems (federation, remote storage, Alertmanager)
+  external_labels:
+    monitor: 'ponder-monitor'
+    environment: 'production'
+
+# Load rules once and periodically evaluate them according to the global 'evaluation_interval'
+rule_files:
+  - "rules/*.yml"
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+# Scrape configuration for all Ponder services
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    metrics_path: /metrics
+    scrape_interval: 30s
+
+  # System metrics via Node Exporter
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node_exporter:9100']
+    metrics_path: /metrics
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+  # Container metrics via cAdvisor  
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    metrics_path: /metrics
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+  # Ponder Builders Service - Arbitrum & Base chains
+  - job_name: 'ponder-builders'
+    static_configs:
+      - targets: ['ponder-builders:42069']
+    metrics_path: /metrics
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    params:
+      format: ['prometheus']  # Request Prometheus format if available
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: 'ponder-builders:42069'  # The actual target
+      - target_label: service
+        replacement: 'ponder-builders'
+      - target_label: chains
+        replacement: 'arbitrum,base'
+
+  # Ponder Capital Service - Ethereum mainnet & Arbitrum
+  - job_name: 'ponder-capital'
+    static_configs:
+      - targets: ['ponder-capital:42069']
+    metrics_path: /metrics
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    params:
+      format: ['prometheus']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: 'ponder-capital:42069'
+      - target_label: service
+        replacement: 'ponder-capital'
+      - target_label: chains
+        replacement: 'ethereum,arbitrum'
+
+  # Ponder Subnets Service (when available)
+  - job_name: 'ponder-subnets'
+    static_configs:
+      - targets: ['ponder-subnets:42069']
+    metrics_path: /metrics
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    params:
+      format: ['prometheus']
+    relabel_configs:
+      - target_label: service
+        replacement: 'ponder-subnets'
+
+  # Apollo Federation Gateway
+  - job_name: 'apollo-gateway'
+    static_configs:
+      - targets: ['apollo-gateway:4000']
+    metrics_path: /metrics
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    relabel_configs:
+      - target_label: service
+        replacement: 'apollo-gateway'
+
+  # PostgreSQL Database Metrics (if postgres_exporter is available)
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres_exporter:9187']
+    metrics_path: /metrics
+    scrape_interval: 30s
+    scrape_timeout: 10s
+    relabel_configs:
+      - target_label: service
+        replacement: 'postgresql'
+
+  # Docker Engine API metrics (if enabled)
+  - job_name: 'docker'
+    static_configs:
+      - targets: ['host.docker.internal:9323']  # Docker metrics endpoint
+    metrics_path: /metrics
+    scrape_interval: 30s
+    scrape_timeout: 10s
+    relabel_configs:
+      - target_label: service
+        replacement: 'docker'
+
+# Remote write configuration for DigitalOcean Managed Prometheus (optional)
+# Uncomment and configure if you want to send metrics to DigitalOcean's managed Prometheus
+# remote_write:
+#   - url: https://prometheus.digitalocean.com/api/prom/push
+#     basic_auth:
+#       username: your-prometheus-username
+#       password: your-prometheus-token
+#     queue_config:
+#       max_samples_per_send: 10000
+#       batch_send_deadline: 10s
+#       max_retries: 5
+
+# Storage configuration
+# Retention time is set via command line: --storage.tsdb.retention.time=30d
+# For DigitalOcean droplets, consider adjusting retention based on available storage
+
+# Global limits to prevent resource exhaustion
+# These are sensible defaults for a medium-sized Ponder deployment
+global_limits:
+  max_series: 1000000     # Maximum number of time series
+  max_samples_per_query: 50000000  # Maximum samples per query

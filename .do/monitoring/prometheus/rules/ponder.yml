@@ -1,0 +1,178 @@
+# Prometheus Alerting Rules for Ponder Services
+# Based on common Ponder operational patterns and performance characteristics
+
+groups:
+  - name: ponder_indexing_health
+    rules:
+      # Ponder service availability
+      - alert: PonderServiceDown
+        expr: up{job=~"ponder-.*"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: blockchain-indexing
+        annotations:
+          summary: "Ponder service {{ $labels.job }} is down"
+          description: "Ponder service {{ $labels.job }} on instance {{ $labels.instance }} has been down for more than 1 minute."
+          
+      # Database connection issues
+      - alert: PonderDatabaseConnectionFailure
+        expr: increase(ponder_database_connection_errors_total[5m]) > 5
+        for: 2m
+        labels:
+          severity: warning
+          team: blockchain-indexing
+        annotations:
+          summary: "High database connection errors for {{ $labels.job }}"
+          description: "Ponder service {{ $labels.job }} is experiencing {{ $value }} database connection errors in the last 5 minutes."
+
+      # RPC connection failures
+      - alert: PonderRPCConnectionFailure
+        expr: increase(ponder_rpc_request_errors_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+          team: blockchain-indexing
+        annotations:
+          summary: "High RPC errors for {{ $labels.job }}"
+          description: "Ponder service {{ $labels.job }} has {{ $value }} RPC errors in the last 5 minutes. Check RPC endpoint health."
+
+      # Indexing lag detection  
+      - alert: PonderIndexingLag
+        expr: (time() - ponder_latest_block_timestamp) > 300
+        for: 5m
+        labels:
+          severity: warning
+          team: blockchain-indexing
+        annotations:
+          summary: "Ponder indexing lag detected for {{ $labels.job }}"
+          description: "Ponder service {{ $labels.job }} is {{ $value }} seconds behind the latest block. Consider checking RPC health or increasing resources."
+
+  - name: ponder_performance
+    rules:
+      # High memory usage
+      - alert: PonderHighMemoryUsage
+        expr: (container_memory_usage_bytes{name=~"ponder-.*"} / container_spec_memory_limit_bytes{name=~"ponder-.*"}) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          team: blockchain-indexing
+        annotations:
+          summary: "High memory usage for {{ $labels.name }}"
+          description: "Container {{ $labels.name }} is using {{ $value }}% of its memory limit."
+
+      # High CPU usage
+      - alert: PonderHighCPUUsage
+        expr: rate(container_cpu_usage_seconds_total{name=~"ponder-.*"}[5m]) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          team: blockchain-indexing
+        annotations:
+          summary: "High CPU usage for {{ $labels.name }}"
+          description: "Container {{ $labels.name }} is using {{ $value }}% CPU for more than 5 minutes."
+
+      # GraphQL query performance
+      - alert: PonderSlowGraphQLQueries
+        expr: histogram_quantile(0.95, rate(ponder_graphql_request_duration_seconds_bucket[5m])) > 5
+        for: 3m
+        labels:
+          severity: warning
+          team: blockchain-indexing
+        annotations:
+          summary: "Slow GraphQL queries detected for {{ $labels.job }}"
+          description: "95th percentile of GraphQL query duration for {{ $labels.job }} is {{ $value }} seconds."
+
+  - name: ponder_system_health
+    rules:
+      # Container restart frequency
+      - alert: PonderFrequentRestarts
+        expr: increase(kube_pod_container_status_restarts_total{container=~"ponder-.*"}[1h]) > 3
+        for: 0m
+        labels:
+          severity: warning
+          team: blockchain-indexing
+        annotations:
+          summary: "Frequent restarts detected for {{ $labels.container }}"
+          description: "Container {{ $labels.container }} has restarted {{ $value }} times in the last hour."
+
+      # Disk space for PostgreSQL
+      - alert: PonderPostgresDiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/var/lib/postgresql"} / node_filesystem_size_bytes{mountpoint="/var/lib/postgresql"}) * 100 < 20
+        for: 5m
+        labels:
+          severity: critical
+          team: blockchain-indexing
+        annotations:
+          summary: "Low disk space for PostgreSQL"
+          description: "PostgreSQL disk space is {{ $value }}% full. Consider cleaning up old data or expanding storage."
+
+      # Network connectivity issues
+      - alert: PonderNetworkConnectivityIssue
+        expr: rate(node_network_receive_errs_total[5m]) > 0.01 or rate(node_network_transmit_errs_total[5m]) > 0.01
+        for: 3m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "Network errors detected on {{ $labels.instance }}"
+          description: "Network interface {{ $labels.device }} is experiencing errors."
+
+  - name: ponder_blockchain_specific
+    rules:
+      # Chain reorganization detection
+      - alert: PonderChainReorganization
+        expr: increase(ponder_chain_reorg_total[10m]) > 0
+        for: 0m
+        labels:
+          severity: info
+          team: blockchain-indexing
+        annotations:
+          summary: "Chain reorganization detected on {{ $labels.chain }}"
+          description: "{{ $value }} chain reorganizations detected on {{ $labels.chain }} in the last 10 minutes."
+
+      # Failed event processing
+      - alert: PonderEventProcessingFailure
+        expr: increase(ponder_events_processed_errors_total[5m]) > 5
+        for: 2m
+        labels:
+          severity: warning
+          team: blockchain-indexing
+        annotations:
+          summary: "High event processing errors for {{ $labels.job }}"
+          description: "{{ $value }} event processing errors in the last 5 minutes for {{ $labels.job }}."
+
+      # Builders staking anomalies (Capital service)
+      - alert: PonderUnusualStakingActivity
+        expr: rate(ponder_staking_events_total{type="stake"}[1h]) > 100 or rate(ponder_staking_events_total{type="unstake"}[1h]) > 50
+        for: 5m
+        labels:
+          severity: info
+          team: blockchain-indexing
+        annotations:
+          summary: "Unusual staking activity detected"
+          description: "High rate of {{ $labels.type }} events: {{ $value }} per hour."
+
+  - name: ponder_apollo_gateway
+    rules:
+      # Apollo Gateway health
+      - alert: ApolloGatewayDown
+        expr: up{job="apollo-gateway"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: api
+        annotations:
+          summary: "Apollo Gateway is down"
+          description: "Apollo Federation Gateway is not responding."
+
+      # High error rate in GraphQL federation
+      - alert: ApolloGatewayHighErrorRate
+        expr: rate(apollo_gateway_errors_total[5m]) > 0.05
+        for: 3m
+        labels:
+          severity: warning
+          team: api
+        annotations:
+          summary: "High error rate in Apollo Gateway"
+          description: "Apollo Gateway error rate is {{ $value }} errors per second."

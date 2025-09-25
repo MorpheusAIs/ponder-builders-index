@@ -1,0 +1,194 @@
+# Custom PostgreSQL Exporter Queries for Ponder
+# Database-specific metrics for blockchain indexing performance
+
+# Ponder schema sizes and growth
+ponder_schema_sizes:
+  query: |
+    SELECT 
+      schemaname,
+      pg_size_pretty(sum(pg_total_relation_size(schemaname||'.'||tablename))::bigint) as size_pretty,
+      sum(pg_total_relation_size(schemaname||'.'||tablename))::bigint as size_bytes
+    FROM pg_tables 
+    WHERE schemaname LIKE 'ponder_%' 
+    GROUP BY schemaname
+  metrics:
+    - schemaname:
+        usage: "LABEL"
+        description: "Schema name"
+    - size_bytes:
+        usage: "GAUGE"
+        description: "Schema size in bytes"
+
+# Ponder table row counts
+ponder_table_row_counts:
+  query: |
+    SELECT 
+      schemaname,
+      tablename,
+      n_tup_ins as inserts,
+      n_tup_upd as updates,
+      n_tup_del as deletes,
+      n_live_tup as live_rows,
+      n_dead_tup as dead_rows
+    FROM pg_stat_user_tables 
+    WHERE schemaname LIKE 'ponder_%'
+  metrics:
+    - schemaname:
+        usage: "LABEL"
+        description: "Schema name"
+    - tablename:
+        usage: "LABEL"
+        description: "Table name"
+    - inserts:
+        usage: "COUNTER"
+        description: "Number of rows inserted"
+    - updates:
+        usage: "COUNTER"
+        description: "Number of rows updated"
+    - deletes:
+        usage: "COUNTER"
+        description: "Number of rows deleted"
+    - live_rows:
+        usage: "GAUGE"
+        description: "Estimated number of live rows"
+    - dead_rows:
+        usage: "GAUGE"
+        description: "Estimated number of dead rows"
+
+# Database connections specific to Ponder apps
+ponder_database_connections:
+  query: |
+    SELECT 
+      application_name,
+      state,
+      count(*) as connection_count
+    FROM pg_stat_activity 
+    WHERE application_name LIKE '%ponder%'
+    GROUP BY application_name, state
+  metrics:
+    - application_name:
+        usage: "LABEL"
+        description: "Application name"
+    - state:
+        usage: "LABEL"
+        description: "Connection state"
+    - connection_count:
+        usage: "GAUGE"
+        description: "Number of connections"
+
+# Long running queries from Ponder
+ponder_long_queries:
+  query: |
+    SELECT 
+      application_name,
+      state,
+      count(*) as query_count,
+      max(extract(epoch from (now() - query_start))) as max_duration_seconds,
+      avg(extract(epoch from (now() - query_start))) as avg_duration_seconds
+    FROM pg_stat_activity 
+    WHERE application_name LIKE '%ponder%' 
+      AND state = 'active'
+      AND extract(epoch from (now() - query_start)) > 1
+    GROUP BY application_name, state
+  metrics:
+    - application_name:
+        usage: "LABEL"
+        description: "Application name"
+    - state:
+        usage: "LABEL"
+        description: "Query state"
+    - query_count:
+        usage: "GAUGE"
+        description: "Number of long running queries"
+    - max_duration_seconds:
+        usage: "GAUGE"
+        description: "Maximum query duration in seconds"
+    - avg_duration_seconds:
+        usage: "GAUGE"
+        description: "Average query duration in seconds"
+
+# Index usage for Ponder tables
+ponder_index_usage:
+  query: |
+    SELECT 
+      schemaname,
+      tablename,
+      indexname,
+      idx_scan as index_scans,
+      idx_tup_read as index_tuples_read,
+      idx_tup_fetch as index_tuples_fetched
+    FROM pg_stat_user_indexes 
+    WHERE schemaname LIKE 'ponder_%'
+  metrics:
+    - schemaname:
+        usage: "LABEL"
+        description: "Schema name"
+    - tablename:
+        usage: "LABEL"
+        description: "Table name"
+    - indexname:
+        usage: "LABEL"
+        description: "Index name"
+    - index_scans:
+        usage: "COUNTER"
+        description: "Number of index scans initiated"
+    - index_tuples_read:
+        usage: "COUNTER"
+        description: "Number of index entries returned by scans"
+    - index_tuples_fetched:
+        usage: "COUNTER"
+        description: "Number of live table rows fetched by simple index scans"
+
+# Vacuum and analyze stats for Ponder tables
+ponder_vacuum_stats:
+  query: |
+    SELECT 
+      schemaname,
+      tablename,
+      last_vacuum,
+      last_autovacuum,
+      last_analyze,
+      last_autoanalyze,
+      vacuum_count,
+      autovacuum_count,
+      analyze_count,
+      autoanalyze_count
+    FROM pg_stat_user_tables 
+    WHERE schemaname LIKE 'ponder_%'
+  metrics:
+    - schemaname:
+        usage: "LABEL"
+        description: "Schema name"
+    - tablename:
+        usage: "LABEL"
+        description: "Table name"
+    - vacuum_count:
+        usage: "COUNTER"
+        description: "Number of times this table has been manually vacuumed"
+    - autovacuum_count:
+        usage: "COUNTER"
+        description: "Number of times this table has been vacuumed by the autovacuum daemon"
+    - analyze_count:
+        usage: "COUNTER"
+        description: "Number of times this table has been manually analyzed"
+    - autoanalyze_count:
+        usage: "COUNTER"
+        description: "Number of times this table has been analyzed by the autovacuum daemon"
+
+# Database locks that might affect Ponder performance
+ponder_database_locks:
+  query: |
+    SELECT 
+      mode,
+      count(*) as lock_count
+    FROM pg_locks l
+    JOIN pg_stat_activity a ON l.pid = a.pid
+    WHERE a.application_name LIKE '%ponder%'
+    GROUP BY mode
+  metrics:
+    - mode:
+        usage: "LABEL"
+        description: "Lock mode"
+    - lock_count:
+        usage: "GAUGE"
+        description: "Number of locks held"

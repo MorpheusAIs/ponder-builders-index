@@ -1,0 +1,39 @@
+# Grafana Datasource Configuration for Prometheus
+# Auto-provision Prometheus datasource on Grafana startup
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    version: 1
+    editable: false
+    jsonData:
+      httpMethod: POST
+      manageAlerts: true
+      prometheusType: Prometheus
+      prometheusVersion: 2.52.0
+      cacheLevel: 'High'
+      disableRecordingRules: false
+      incrementalQueryOverlapWindow: 10m
+      queryTimeout: 60s
+      timeInterval: 15s
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: tempo
+          
+  # Optional: Add Loki for logs if you extend the monitoring stack
+  # - name: Loki
+  #   type: loki  
+  #   access: proxy
+  #   url: http://loki:3100
+  #   jsonData:
+  #     maxLines: 1000
+  #     derivedFields:
+  #       - datasourceUid: tempo
+  #         matcherRegex: "traceID=(\\w+)"
+  #         name: TraceID
+  #         url: "$${__value.raw}"
