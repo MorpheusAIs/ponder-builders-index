@@ -121,6 +121,37 @@ npm run dev
 - SQL over HTTP: http://localhost:42070/sql
 - Health check: http://localhost:42070/health
 
+## Production Deployment
+
+### 🌐 **Live Production Services**
+
+**Base URL**: `https://morpheusai-ponder-monorepo-63c6163e.ondigitalocean.app`
+
+#### **GraphQL Endpoints:**
+- **Builders (Arbitrum & Base)**: https://morpheusai-ponder-monorepo-63c6163e.ondigitalocean.app/builders/graphql
+- **Capital (Ethereum & Arbitrum)**: https://morpheusai-ponder-monorepo-63c6163e.ondigitalocean.app/capital/graphql  
+- **Apollo Gateway (Federated)**: https://morpheusai-ponder-monorepo-63c6163e.ondigitalocean.app/graphql
+
+#### **SQL API Endpoints:**
+- **Builders SQL**: https://morpheusai-ponder-monorepo-63c6163e.ondigitalocean.app/builders/sql
+- **Capital SQL**: https://morpheusai-ponder-monorepo-63c6163e.ondigitalocean.app/capital/sql
+
+#### **Health Checks:**
+- **Builders Health**: https://morpheusai-ponder-monorepo-63c6163e.ondigitalocean.app/builders/health
+- **Capital Health**: https://morpheusai-ponder-monorepo-63c6163e.ondigitalocean.app/capital/health
+
+#### **Production Monitoring:**
+```bash
+# View live application logs
+doctl apps logs 63c6163e-5b42-4a5e-b787-940e0213ac7d --follow
+
+# Check deployment status  
+doctl apps get 63c6163e-5b42-4a5e-b787-940e0213ac7d
+
+# View deployment history
+doctl apps list-deployments 63c6163e-5b42-4a5e-b787-940e0213ac7d
+```
+
 ## Development
 
 Each Ponder app is independently deployable but shares common configuration:
