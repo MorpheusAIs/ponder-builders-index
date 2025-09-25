@@ -24,12 +24,13 @@ services:
     repo: BowTiedSwan/ponder-builders-index
     branch: main
   build_command: |
-    npm install
-    npm run build --workspace=packages/shared-abis
-    npm run build --workspace=apps/ponder-builders
+    corepack enable
+    pnpm install --frozen-lockfile
+    pnpm build --filter=packages/shared-abis
+    pnpm build --filter=apps/ponder-builders
   run_command: |
     cd apps/ponder-builders
-    npm run start
+    pnpm start
   environment_slug: node-js
   instance_count: 1
   instance_size_slug: professional-xs  # 1 vCPU, 1 GB RAM
@@ -67,12 +68,13 @@ services:
     repo: BowTiedSwan/ponder-builders-index
     branch: main
   build_command: |
-    npm install
-    npm run build --workspace=packages/shared-abis
-    npm run build --workspace=apps/ponder-capital
+    corepack enable
+    pnpm install --frozen-lockfile
+    pnpm build --filter=packages/shared-abis
+    pnpm build --filter=apps/ponder-capital
   run_command: |
     cd apps/ponder-capital
-    npm run start
+    pnpm start
   environment_slug: node-js
   instance_count: 1
   instance_size_slug: professional-xs  # 1 vCPU, 1 GB RAM
@@ -110,11 +112,12 @@ services:
     repo: BowTiedSwan/ponder-builders-index
     branch: main
   build_command: |
-    npm install
-    npm run build --workspace=gateway/apollo-federation
+    corepack enable
+    pnpm install --frozen-lockfile
+    pnpm build --filter=gateway/apollo-federation
   run_command: |
     cd gateway/apollo-federation
-    npm run start
+    pnpm start
   environment_slug: node-js
   instance_count: 1
   instance_size_slug: basic-xxs  # 0.5 vCPU, 0.5 GB RAM
@@ -148,9 +151,10 @@ services:
     branch: main
   build_command: |
     cd /workspace
-    npm install
-    npm run build --workspace=packages/shared-abis
-    npm run build --workspace=apps/ponder-builders
+    corepack enable
+    pnpm install --frozen-lockfile
+    pnpm build --filter=packages/shared-abis
+    pnpm build --filter=apps/ponder-builders
   run_command: npx ponder serve --schema=ponder_builders_latest
   environment_slug: node-js
   instance_count: 1
@@ -181,9 +185,10 @@ jobs:
     branch: main
   build_command: |
     cd /workspace
-    npm install
-    npm run build --workspace=packages/shared-abis
-    npm run build --workspace=apps/ponder-builders
+    corepack enable
+    pnpm install --frozen-lockfile
+    pnpm build --filter=packages/shared-abis
+    pnpm build --filter=apps/ponder-builders
   run_command: npx ponder db create-views --schema=ponder_builders_${APP_DOMAIN_HASH} --views-schema=ponder_builders_latest
   environment_slug: node-js
   instance_size_slug: basic-xxs
@@ -199,9 +204,10 @@ jobs:
     branch: main
   build_command: |
     cd /workspace
-    npm install
-    npm run build --workspace=packages/shared-abis
-    npm run build --workspace=apps/ponder-capital
+    corepack enable
+    pnpm install --frozen-lockfile
+    pnpm build --filter=packages/shared-abis
+    pnpm build --filter=apps/ponder-capital
   run_command: npx ponder db create-views --schema=ponder_capital_${APP_DOMAIN_HASH} --views-schema=ponder_capital_latest
   environment_slug: node-js
   instance_size_slug: basic-xxs
@@ -210,17 +216,5 @@ jobs:
   - key: NODE_ENV
     value: production
 
-# Static site for documentation/dashboard (optional)
-static_sites:
-- name: docs
-  source_dir: docs
-  github:
-    repo: BowTiedSwan/ponder-builders-index
-    branch: main
-  build_command: |
-    echo "Building static documentation site"
-    mkdir -p _site
-    cp -r . _site/
-  output_dir: _site
-  routes:
-  - path: /docs
+# Static documentation site removed due to buildpack detection issues
+# Documentation is available in the /docs directory of the repository
