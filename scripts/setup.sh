@@ -109,7 +109,7 @@ NODE_ENV=development
 
 # Service URLs
 PONDER_BUILDERS_URL=http://localhost:42069/graphql
-ARBITRUM_SUBGRAPH_URL=https://api.studio.thegraph.com/query/73688/lumerin-node/version/latest
+ARBITRUM_SUBGRAPH_URL=https://api.studio.thegraph.com/query/73688/morpheus-mainnet-arbitrum/version/latest
 BASE_SUBGRAPH_URL=https://subgraph.satsuma-prod.com/8675f21b07ed/9iqb9f4qcmhosiruyg763--465704/morpheus-mainnet-base/api
 EOF
     print_status "Created gateway/apollo-federation/.env file"
