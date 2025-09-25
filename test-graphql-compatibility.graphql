@@ -1,0 +1,102 @@
+# GraphQL Compatibility Test
+# This query tests that our Ponder GraphQL API exactly matches the subgraph API
+# All field names and relationships should work identically
+
+query FullCompatibilityTest {
+  # Test 1: Main entities with exact field names
+  DepositPool(first: 5) {
+    id
+    rewardPoolId
+    depositPool
+    totalStaked
+  }
+  
+  User(first: 10, where: { staked_gt: "0" }) {
+    id
+    address
+    rewardPoolId
+    depositPool
+    staked
+    claimed
+    
+    # Test 2: Relationship fields (must work exactly like subgraph)
+    interactions(first: 3) {
+      id
+      blockNumber
+      blockTimestamp
+      transactionHash
+      user {  # CRITICAL: This must be "user", not "userId"
+        address
+      }
+      type
+      amount
+      depositPool
+      totalStaked
+      rate
+    }
+  }
+  
+  # Test 3: PoolInteraction entity direct queries
+  PoolInteraction(
+    first: 20, 
+    orderBy: blockTimestamp, 
+    orderDirection: desc,
+    where: { type: 0 }
+  ) {
+    id
+    blockNumber
+    blockTimestamp
+    transactionHash
+    user {  # CRITICAL: Must be relationship, not foreign key
+      address
+      staked
+    }
+    type
+    amount
+    depositPool
+    totalStaked
+    rate
+  }
+  
+  # Test 4: Referral system (complex relationships)
+  Referrer(first: 5) {
+    id
+    user {  # Relationship to User
+      address
+    }
+    referrerAddress
+    claimed
+    referrals {  # Relationship to Referral entities
+      id
+      referral {  # CRITICAL: Must be "referral", not "referralUserId"  
+        address
+      }
+      referrer {  # CRITICAL: Must be "referrer", not "referrerId"
+        referrerAddress
+      }
+      referralAddress
+      referrerAddress
+      amount
+    }
+  }
+  
+  # Test 5: Proxy events (immutable entities)
+  AdminChanged(first: 5, orderBy: blockTimestamp, orderDirection: desc) {
+    id
+    blockNumber
+    blockTimestamp
+    transactionHash
+    previousAdmin
+    newAdmin
+    depositPool
+  }
+  
+  BeaconUpgraded(first: 5) {
+    id
+    blockNumber
+    blockTimestamp
+    transactionHash
+    beacon
+    depositPool
+  }
+}
