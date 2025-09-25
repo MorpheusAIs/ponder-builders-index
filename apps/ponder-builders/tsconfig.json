@@ -5,14 +5,13 @@
     "noUncheckedIndexedAccess": true,
 
     // Interop constraints
-    "verbatimModuleSyntax": false,
     "esModuleInterop": true,
     "isolatedModules": true,
     "allowSyntheticDefaultImports": true,
     "resolveJsonModule": true,
 
     // Language and environment
-    "moduleResolution": "bundler",
+    "moduleResolution": "node",
     "module": "ESNext",
     "noEmit": true,
     "lib": ["ES2022"],
