@@ -5,6 +5,15 @@
  * 
  * This script helps with migrating queries from existing subgraphs to Ponder
  * by analyzing GraphQL queries and suggesting equivalent Ponder queries.
+ * 
+ * Supports:
+ * - Builders entities (BuildersProject, BuildersUser, etc.)
+ * - Capital entities (DepositPool, User, PoolInteraction, Referral, etc.)
+ * - Proxy contract events (AdminChanged, BeaconUpgraded, etc.)
+ * 
+ * Usage:
+ *   node migrate-subgraph.js <query-file.graphql>  # Analyze specific file
+ *   node migrate-subgraph.js                       # Run example analysis
  */
 
 import fs from 'fs';
@@ -12,13 +21,30 @@ import path from 'path';
 
 // Mapping from subgraph entities to Ponder entities
 const ENTITY_MAPPING = {
+  // Builders entities (existing)
   'BuildersProject': 'buildersProject',
   'BuildersUser': 'buildersUser', 
   'counters': 'counters',
+  
+  // Capital entities - matching subgraph schema exactly
+  'DepositPool': 'depositPool',
+  'User': 'user',
+  'PoolInteraction': 'poolInteraction',
+  'InteractionCount': 'interactionCount',
+  'Referral': 'referral',
+  'Referrer': 'referrer',
+  
+  // Proxy contract events (immutable)
+  'AdminChanged': 'adminChanged',
+  'BeaconUpgraded': 'beaconUpgraded',
+  'Initialized': 'initialized',
+  'Upgraded': 'upgraded',
+  'OwnershipTransferred': 'ownershipTransferred',
 };
 
 // Field mappings where names differ
 const FIELD_MAPPING = {
+  // Builders entities (existing)
   'BuildersProject': {
     'id': 'id',
     'name': 'name',
@@ -39,6 +65,98 @@ const FIELD_MAPPING = {
     'lastStake': 'lastStake',
     'claimLockEnd': 'claimLockEnd',
     'buildersProject': 'project' // Relationship name
+  },
+  
+  // Capital entities - exact field mappings (designed for compatibility)
+  'DepositPool': {
+    'id': 'id',
+    'rewardPoolId': 'rewardPoolId',
+    'depositPool': 'depositPool',
+    'totalStaked': 'totalStaked'
+  },
+  'User': {
+    'id': 'id',
+    'address': 'address',
+    'rewardPoolId': 'rewardPoolId', 
+    'depositPool': 'depositPool',
+    'staked': 'staked',
+    'claimed': 'claimed',
+    'interactions': 'interactions' // Relationship to PoolInteraction
+  },
+  'PoolInteraction': {
+    'id': 'id',
+    'blockNumber': 'blockNumber',
+    'blockTimestamp': 'blockTimestamp',
+    'transactionHash': 'transactionHash',
+    'user': 'user', // FIXED: Direct relationship field (GraphQL compatible)
+    'type': 'type',
+    'amount': 'amount', 
+    'depositPool': 'depositPool',
+    'totalStaked': 'totalStaked',
+    'rate': 'rate'
+  },
+  'InteractionCount': {
+    'id': 'id',
+    'count': 'count'
+  },
+  'Referral': {
+    'id': 'id',
+    'referral': 'referral', // FIXED: Direct relationship field (GraphQL compatible)
+    'referrer': 'referrer', // FIXED: Direct relationship field (GraphQL compatible)
+    'referralAddress': 'referralAddress',
+    'referrerAddress': 'referrerAddress', 
+    'amount': 'amount'
+  },
+  'Referrer': {
+    'id': 'id',
+    'user': 'userId', // Foreign key relationship
+    'referrerAddress': 'referrerAddress',
+    'claimed': 'claimed',
+    'referrals': 'referrals' // Reverse relationship
+  },
+  
+  // Proxy contract events (immutable) - exact field mappings
+  'AdminChanged': {
+    'id': 'id',
+    'blockNumber': 'blockNumber',
+    'blockTimestamp': 'blockTimestamp',
+    'transactionHash': 'transactionHash',
+    'previousAdmin': 'previousAdmin',
+    'newAdmin': 'newAdmin',
+    'depositPool': 'depositPool'
+  },
+  'BeaconUpgraded': {
+    'id': 'id',
+    'blockNumber': 'blockNumber',
+    'blockTimestamp': 'blockTimestamp', 
+    'transactionHash': 'transactionHash',
+    'beacon': 'beacon',
+    'depositPool': 'depositPool'
+  },
+  'Initialized': {
+    'id': 'id',
+    'blockNumber': 'blockNumber',
+    'blockTimestamp': 'blockTimestamp',
+    'transactionHash': 'transactionHash',
+    'version': 'version',
+    'depositPool': 'depositPool'
+  },
+  'Upgraded': {
+    'id': 'id',
+    'blockNumber': 'blockNumber', 
+    'blockTimestamp': 'blockTimestamp',
+    'transactionHash': 'transactionHash',
+    'implementation': 'implementation',
+    'depositPool': 'depositPool'
+  },
+  'OwnershipTransferred': {
+    'id': 'id',
+    'blockNumber': 'blockNumber',
+    'blockTimestamp': 'blockTimestamp',
+    'transactionHash': 'transactionHash', 
+    'previousOwner': 'previousOwner',
+    'newOwner': 'newOwner',
+    'depositPool': 'depositPool'
   }
 };
 
@@ -131,30 +249,67 @@ function printMigrationReport(suggestions, originalQuery, ponderQuery) {
   
   console.log('\n⚠️  Manual Review Needed:');
   console.log('  • Verify field names match your Ponder schema');
-  console.log('  • Check that relationships are properly defined');
+  console.log('  • Check that relationships are properly defined'); 
   console.log('  • Test the query against your Ponder GraphQL endpoint');
   console.log('  • Consider using SQL over HTTP for complex analytics');
+  console.log('\n💡 Migration Tips:');
+  console.log('  • Capital entities: Use port 42070 for GraphQL/SQL APIs');
+  console.log('  • Builders entities: Use port 42069 for GraphQL/SQL APIs'); 
+  console.log('  • Relationships: user.interactions, referrer.referrals work the same');
+  console.log('  • Immutable entities: AdminChanged, PoolInteraction are append-only');
+  console.log('  • Real rates: PoolInteraction.rate now contains actual contract data');
 }
 
 // Example usage
 function runExample() {
   const exampleQuery = `
-query GetBuildersProjects {
-  BuildersProject(
+query GetCapitalDepositPools {
+  DepositPool(
     first: 10,
     orderBy: totalStaked,
     orderDirection: desc,
-    where: { totalUsers_gt: 0 }
+    where: { totalStaked_gt: 0 }
   ) {
     id
-    name
+    rewardPoolId
+    depositPool
     totalStaked
-    totalUsers
-    admin
-    users(first: 5) {
+  }
+  
+  User(
+    first: 20,
+    where: { staked_gt: 0 }
+  ) {
+    id
+    address
+    rewardPoolId
+    depositPool
+    staked
+    claimed
+    interactions(first: 5, orderBy: blockTimestamp, orderDirection: desc) {
+      id
+      type
+      amount
+      rate
+      blockTimestamp
+    }
+  }
+  
+  PoolInteraction(
+    first: 50,
+    orderBy: blockTimestamp,
+    orderDirection: desc,
+    where: { type: 0 }
+  ) {
+    id
+    blockTimestamp
+    type
+    amount
+    depositPool
+    totalStaked
+    rate
+    user {
       address
-      staked
-      claimed
     }
   }
 }`;
@@ -180,17 +335,25 @@ if (process.argv.length > 2) {
   
 } else {
   console.log('🔧 Subgraph Migration Utility\n');
+  console.log('Supports migration from MorpheusAI subgraphs to Ponder indexers:');
+  console.log('• Builders entities (Arbitrum, Base)');
+  console.log('• Capital entities (Ethereum deposit pools)');
+  console.log('• All proxy contract events\n');
   console.log('Usage: node migrate-subgraph.js <query-file.graphql>');
   console.log('   or: node migrate-subgraph.js (for example)\n');
   
-  console.log('Running example analysis...\n');
+  console.log('Running capital entities example analysis...\n');
   runExample();
 }
 
 console.log('\n🔗 Useful Resources:');
-console.log('• Ponder GraphQL API: http://localhost:42069/graphql');
-console.log('• Ponder SQL API: http://localhost:42069/sql');  
+console.log('• Ponder APIs:');
+console.log('  - Builders GraphQL: http://localhost:42069/graphql');
+console.log('  - Builders SQL: http://localhost:42069/sql'); 
+console.log('  - Capital GraphQL: http://localhost:42070/graphql');
+console.log('  - Capital SQL: http://localhost:42070/sql'); 
 console.log('• Documentation: https://ponder.sh/docs');
 console.log('• Existing subgraphs:');
-console.log('  - Arbitrum: https://api.studio.thegraph.com/query/73688/morpheus-mainnet-arbitrum/version/latest');
-console.log('  - Base: https://subgraph.satsuma-prod.com/8675f21b07ed/9iqb9f4qcmhosiruyg763--465704/morpheus-mainnet-base/api');
+console.log('  - Arbitrum (builders): https://api.studio.thegraph.com/query/73688/morpheus-mainnet-arbitrum/version/latest');
+console.log('  - Base (builders): https://subgraph.satsuma-prod.com/8675f21b07ed/9iqb9f4qcmhosiruyg763--465704/morpheus-mainnet-base/api');
+console.log('  - Capital (deposit pools): https://api.studio.thegraph.com/query/73688/morpheus-mainnet-v-2/version/latest');
