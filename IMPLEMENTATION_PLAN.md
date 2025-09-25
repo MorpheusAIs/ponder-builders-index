@@ -25,7 +25,7 @@ This document outlines the **complete implementation plan** for migrating Morphe
 
 | Component | Current (The Graph) | Future (Ponder) | Status |
 |-----------|-------------------|-----------------|---------|
-| **Arbitrum Indexing** | `api.studio.thegraph.com/query/73688/lumerin-node/version/latest` | `localhost:42069/graphql` | ✅ Ready |
+| **Arbitrum Indexing** | `https://api.studio.thegraph.com/query/73688/morpheus-mainnet-arbitrum/version/latest` | `localhost:42069/graphql` | ✅ Ready |
 | **Base Indexing** | `subgraph.satsuma-prod.com/8675f21b07ed/.../morpheus-mainnet-base/api` | `localhost:42069/graphql` | ✅ Ready |
 | **API Layer** | GraphQL only | GraphQL + SQL over HTTP | ✅ Ready |
 | **Performance** | ~1-2s queries | ~100-200ms queries (10x faster) | ✅ Ready |
