@@ -1,0 +1,63 @@
+name: morpheusai-ponder-capital-simple
+
+alerts:
+- rule: DEPLOYMENT_FAILED
+- rule: DOMAIN_FAILED
+
+databases:
+- cluster_name: morpheusai-ponder-postgres
+  db_name: ponder_production
+  db_user: ponder_user
+  engine: PG
+  name: ponder-db
+  production: true
+  version: "15"
+
+services:
+# PostgreSQL database connection info is automatically injected as DATABASE_URL
+
+# Ponder Capital Service - Handles Ethereum mainnet & Arbitrum capital flows
+- name: ponder-capital
+  source_dir: /
+  github:
+    repo: BowTiedSwan/ponder-builders-index
+    branch: main
+  build_command: |
+    corepack enable
+    pnpm install --frozen-lockfile
+    cd packages/shared-abis && pnpm build
+  run_command: |
+    cd apps/ponder-capital
+    pnpm start
+  environment_slug: node-js
+  instance_count: 1
+  instance_size_slug: basic-xxs  # 0.5 vCPU, 0.5 GB RAM
+  http_port: 3000
+  routes:
+  - path: /
+    preserve_path_prefix: true
+  health_check:
+    http_path: /health
+    initial_delay_seconds: 60
+    period_seconds: 15
+    timeout_seconds: 15
+    success_threshold: 1
+    failure_threshold: 10
+  envs:
+  - key: NODE_ENV
+    value: production
+  - key: DATABASE_SCHEMA
+    value: ponder_capital_simple
+  - key: VIEWS_SCHEMA
+    value: ponder_capital_latest
+  - key: PONDER_LOG_LEVEL
+    value: info
+  - key: PONDER_RPC_URL_1
+    value: "https://api.noderpc.xyz/rpc-mainnet/_M2px5r8-_azU1pKiJUscsbtCPEgnfkl7HBu1egQRvM"
+    type: SECRET
+  - key: PONDER_RPC_URL_42161
+    value: "https://arb-mainnet.g.alchemy.com/v2/8hD3GpBjP6k2a5rdlPNSy"
+    type: SECRET
+  - key: DATABASE_URL
+    value: "postgresql://doadmin:AVNS_OmHrlDNzrnJ8UB7F_wk@morpheusai-ponder-postgres-do-user-18955987-0.l.db.ondigitalocean.com:25060/ponder_production?sslmode=require"
+    type: SECRET
