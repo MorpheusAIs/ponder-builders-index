@@ -4,8 +4,26 @@ export { ERC20Abi } from './ERC20.js';
 export { L2FactoryAbi } from './L2Factory.js';
 export { SubnetFactoryAbi } from './SubnetFactory.js';
 
+// Capital contract ABIs
+export { DepositPoolAbi } from './capital/DepositPoolAbi.js';
+export { L1SenderV2Abi } from './capital/L1SenderV2Abi.js';
+export { ChainLinkDataConsumerAbi } from './capital/ChainLinkDataConsumerAbi.js';
+export { RewardPoolAbi } from './capital/RewardPoolAbi.js';
+export { DistributorAbi } from './capital/DistributorAbi.js';
+export { L2MessageReceiverAbi } from './capital/L2MessageReceiverAbi.js';
+
 // Contract addresses by chain
 export const CONTRACT_ADDRESSES = {
+  ethereum: {
+    chainId: 1,
+    contracts: {
+      // Capital contracts on Ethereum mainnet
+      l1SenderV2: '0x50e80ea310269c547b64cc8b8a606be0ec467d1f' as const,
+      chainLinkDataConsumer: '0x94e6720a624ea275b44d357a7f21bfcf09ff7e11' as const,
+      rewardPool: '0xe30279b79392aeff7fdf1883c23d52eba9d88a75' as const,
+      distributor: '0x5b660ab78f3ac743953f9e68630a2d66e7b45f64' as const,
+    }
+  },
   arbitrum: {
     chainId: 42161,
     contracts: {
@@ -13,6 +31,8 @@ export const CONTRACT_ADDRESSES = {
       morToken: '0x092bAaDB7DEf4C3981454dD9c0A0D7FF07bCFc86' as const,
       l2Factory: '0x890bfa255e6ee8db5c67ab32dc600b14ebc4546c' as const,
       subnetFactory: '0x37b94bd80b6012fb214bb6790b31a5c40d6eb7a5' as const,
+      // Capital contracts on Arbitrum
+      l2MessageReceiver: '0xd4a8ECcBe696295e68572A98b1aA70Aa9277d427' as const,
     }
   },
   base: {
@@ -26,7 +46,7 @@ export const CONTRACT_ADDRESSES = {
 
 // GraphQL endpoint configuration for existing subgraphs
 export const SUBGRAPH_ENDPOINTS = {
-  arbitrum: 'https://api.studio.thegraph.com/query/73688/lumerin-node/version/latest',
+  arbitrum: 'https://api.studio.thegraph.com/query/73688/morpheus-mainnet-arbitrum/version/latest',
   base: 'https://subgraph.satsuma-prod.com/8675f21b07ed/9iqb9f4qcmhosiruyg763--465704/morpheus-mainnet-base/api',
 } as const;
 
