@@ -7,7 +7,7 @@ set -e
 
 # Configuration
 PROJECT_NAME="morpheusai-ponder"
-REPO_URL="https://github.com/MorpheusAIs/ponder-builders-index"
+REPO_URL="https://github.com/BowTiedSwan/ponder-builders-index"
 DO_APP_SPEC=".do/app.yaml"
 
 # Colors for output
@@ -103,19 +103,25 @@ setup_database() {
         print_info "Database cluster $DB_NAME already exists"
     else
         print_info "Creating PostgreSQL database cluster..."
-        doctl databases create $DB_NAME \
-            --engine postgres \
+        
+        # Create database and capture the output to get the ID
+        CREATE_OUTPUT=$(doctl databases create $DB_NAME \
+            --engine pg \
             --version 15 \
             --size db-s-1vcpu-1gb \
             --region nyc1 \
-            --num-nodes 1
+            --num-nodes 1 \
+            --format ID,Status --no-header)
         
+        # Extract the database ID from the output
+        DB_ID=$(echo "$CREATE_OUTPUT" | awk '{print $1}')
+        print_info "Database ID: $DB_ID"
         print_status "Database cluster created successfully"
         
         # Wait for database to be ready
         print_info "Waiting for database to be ready..."
         while true; do
-            STATUS=$(doctl databases get $DB_NAME --format Status --no-header)
+            STATUS=$(doctl databases get $DB_ID --format Status --no-header)
             if [ "$STATUS" = "online" ]; then
                 break
             fi
