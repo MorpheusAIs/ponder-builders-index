@@ -24,7 +24,7 @@ export const poolInteraction = onchainTable("PoolInteraction", (t) => ({
   blockNumber: t.bigint().notNull(),
   blockTimestamp: t.bigint().notNull(), // BigInt in subgraph
   transactionHash: t.hex().notNull(),
-  user: t.hex().notNull().references(() => user.id), // FIXED: "user" not "userId" for GraphQL compatibility
+  user: t.hex().notNull(), // Foreign key handled by relations
   type: t.bigint().notNull(), // 0=STAKE, 1=WITHDRAW, 2=CLAIM
   amount: t.bigint().notNull(),
   depositPool: t.hex().notNull(),
@@ -41,15 +41,15 @@ export const interactionCount = onchainTable("InteractionCount", (t) => ({
 // Referral system entities
 export const referrer = onchainTable("Referrer", (t) => ({
   id: t.hex().primaryKey(), // same as user.id
-  userId: t.hex().notNull().references(() => user.id),
+  userId: t.hex().notNull(), // Foreign key handled by relations
   referrerAddress: t.hex().notNull(),
   claimed: t.bigint().notNull().default(0n),
 }));
 
 export const referral = onchainTable("Referral", (t) => ({
   id: t.hex().primaryKey(), // referralUser.id + referrer.id
-  referral: t.hex().notNull().references(() => user.id), // FIXED: "referral" not "referralUserId" for GraphQL compatibility
-  referrer: t.hex().notNull().references(() => referrer.id), // FIXED: "referrer" not "referrerId" for GraphQL compatibility
+  referral: t.hex().notNull(), // Foreign key handled by relations
+  referrer: t.hex().notNull(), // Foreign key handled by relations
   referralAddress: t.hex().notNull(),
   referrerAddress: t.hex().notNull(),
   amount: t.bigint().notNull(),
