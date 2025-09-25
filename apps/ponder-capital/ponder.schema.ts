@@ -22,9 +22,9 @@ export const user = onchainTable("User", (t) => ({
 export const poolInteraction = onchainTable("PoolInteraction", (t) => ({
   id: t.hex().primaryKey(), // txHash + counter
   blockNumber: t.bigint().notNull(),
-  blockTimestamp: t.bigint().notNull(), // Note: BigInt in original, not integer
+  blockTimestamp: t.bigint().notNull(), // BigInt in subgraph
   transactionHash: t.hex().notNull(),
-  userId: t.hex().notNull().references(() => user.id),
+  user: t.hex().notNull().references(() => user.id), // FIXED: "user" not "userId" for GraphQL compatibility
   type: t.bigint().notNull(), // 0=STAKE, 1=WITHDRAW, 2=CLAIM
   amount: t.bigint().notNull(),
   depositPool: t.hex().notNull(),
@@ -48,8 +48,8 @@ export const referrer = onchainTable("Referrer", (t) => ({
 
 export const referral = onchainTable("Referral", (t) => ({
   id: t.hex().primaryKey(), // referralUser.id + referrer.id
-  referralUserId: t.hex().notNull().references(() => user.id),
-  referrerId: t.hex().notNull().references(() => referrer.id),
+  referral: t.hex().notNull().references(() => user.id), // FIXED: "referral" not "referralUserId" for GraphQL compatibility
+  referrer: t.hex().notNull().references(() => referrer.id), // FIXED: "referrer" not "referrerId" for GraphQL compatibility
   referralAddress: t.hex().notNull(),
   referrerAddress: t.hex().notNull(),
   amount: t.bigint().notNull(),
@@ -114,7 +114,7 @@ export const userRelations = relations(user, ({ many, one }) => ({
 
 export const poolInteractionRelations = relations(poolInteraction, ({ one }) => ({
   user: one(user, {
-    fields: [poolInteraction.userId],
+    fields: [poolInteraction.user], // Updated field reference
     references: [user.id],
   }),
 }));
@@ -129,11 +129,11 @@ export const referrerRelations = relations(referrer, ({ one, many }) => ({
 
 export const referralRelations = relations(referral, ({ one }) => ({
   referralUser: one(user, {
-    fields: [referral.referralUserId],
+    fields: [referral.referral], // Updated field reference
     references: [user.id],
   }),
-  referrer: one(referrer, {
-    fields: [referral.referrerId], 
+  referrerEntity: one(referrer, {
+    fields: [referral.referrer], // Updated field reference
     references: [referrer.id],
   }),
 }));

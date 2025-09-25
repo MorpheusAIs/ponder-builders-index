@@ -13,6 +13,7 @@ import {
   ownershipTransferred
 } from "ponder:schema";
 import { eq, sql } from "ponder";
+import { DepositPoolAbi } from "../../../packages/shared-abis/src/index.js";
 
 // Helper functions matching existing subgraph logic
 
@@ -126,6 +127,104 @@ const getOrCreateUser = async (address: `0x${string}`, rewardPoolId: bigint, dep
   return userRecord[0];
 };
 
+// Contract Data Fetching - Phase 4.2 Implementation
+// Cache for frequently accessed contract data
+const contractDataCache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_TTL = 30000; // 30 seconds cache TTL
+
+// Get current rate for a user from the deposit pool contract
+const getUserRate = async (depositPoolAddress: `0x${string}`, userAddress: `0x${string}`, rewardPoolIndex: bigint, context: any): Promise<bigint> => {
+  const cacheKey = `rate-${depositPoolAddress}-${userAddress}-${rewardPoolIndex}`;
+  const cached = contractDataCache.get(cacheKey);
+  
+  // Return cached value if still valid
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.data as bigint;
+  }
+
+  try {
+    // Read the user's current rate from the contract
+    const userData = await context.client.readContract({
+      address: depositPoolAddress,
+      abi: DepositPoolAbi,
+      functionName: "usersData",
+      args: [rewardPoolIndex, userAddress],
+    });
+
+    // userData typically returns [staked, withdrawn, rate, claimed, referrer]
+    const rate = userData[2] as bigint; // Rate is typically the 3rd element
+    
+    // Cache the result
+    contractDataCache.set(cacheKey, { data: rate, timestamp: Date.now() });
+    
+    return rate;
+  } catch (error) {
+    console.warn(`Failed to fetch rate for user ${userAddress} in pool ${depositPoolAddress}:`, error);
+    return 0n; // Return 0 as fallback
+  }
+};
+
+// Removed: getContractTotalStaked (using original event-based totalStaked calculations instead)
+
+// Get user's complete data from the contract
+const getUserContractData = async (depositPoolAddress: `0x${string}`, userAddress: `0x${string}`, rewardPoolIndex: bigint, context: any) => {
+  const cacheKey = `userData-${depositPoolAddress}-${userAddress}-${rewardPoolIndex}`;
+  const cached = contractDataCache.get(cacheKey);
+  
+  // Return cached value if still valid
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.data;
+  }
+
+  try {
+    // Read the user's complete data from the contract
+    const userData = await context.client.readContract({
+      address: depositPoolAddress,
+      abi: DepositPoolAbi,
+      functionName: "usersData",
+      args: [rewardPoolIndex, userAddress],
+    });
+
+    // Parse the returned data structure
+    const parsedData = {
+      staked: userData[0] as bigint,
+      withdrawn: userData[1] as bigint,
+      rate: userData[2] as bigint,
+      claimed: userData[3] as bigint,
+      referrer: userData[4] as `0x${string}`,
+    };
+    
+    // Cache the result
+    contractDataCache.set(cacheKey, { data: parsedData, timestamp: Date.now() });
+    
+    return parsedData;
+  } catch (error) {
+    console.warn(`Failed to fetch user data for ${userAddress} in pool ${depositPoolAddress}:`, error);
+    return {
+      staked: 0n,
+      withdrawn: 0n,
+      rate: 0n,
+      claimed: 0n,
+      referrer: "0x0000000000000000000000000000000000000000" as `0x${string}`,
+    };
+  }
+};
+
+// Clear expired cache entries periodically
+const clearExpiredCache = () => {
+  const now = Date.now();
+  for (const [key, value] of contractDataCache.entries()) {
+    if (now - value.timestamp > CACHE_TTL) {
+      contractDataCache.delete(key);
+    }
+  }
+};
+
+// Set up cache cleanup interval
+setInterval(clearExpiredCache, CACHE_TTL);
+
+// Removed: createPoolInteractionWithContractData helper (reverted to original subgraph logic)
+
 // Deposit Pool Event Handlers - matching exact subgraph logic
 
 // Proxy events (immutable)
@@ -213,7 +312,10 @@ ponder.on("DepositPoolStETH:UserStaked", async ({ event, context }: any) => {
     })
     .where(eq(depositPool.id, pool.id));
 
-  // Get interaction counter and create pool interaction
+  // Get user's rate from contract (Phase 4.2 improvement)
+  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+
+  // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
   const interactionId = createPoolInteractionId(event.transaction.hash, counter);
   
@@ -222,12 +324,12 @@ ponder.on("DepositPoolStETH:UserStaked", async ({ event, context }: any) => {
     blockNumber: event.block.number,
     blockTimestamp: event.block.timestamp,
     transactionHash: event.transaction.hash,
-    userId: userRecord.id,
+    user: userRecord.id, // FIXED: "user" field name for GraphQL compatibility
     type: 0n, // STAKE = 0
     amount: amount,
     depositPool: depositPoolAddress,
-    totalStaked: pool.totalStaked + amount,
-    rate: 0n, // TODO: Calculate rate based on contract logic
+    totalStaked: pool.totalStaked + amount, // Keep original event-based calculation
+    rate: userRate, // Phase 4.2: Real rate instead of 0n
   });
 });
 
@@ -257,7 +359,10 @@ ponder.on("DepositPoolStETH:UserWithdrawn", async ({ event, context }: any) => {
     })
     .where(eq(depositPool.id, pool.id));
 
-  // Get interaction counter and create pool interaction
+  // Get user's rate from contract (Phase 4.2 improvement)
+  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+
+  // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
   const interactionId = createPoolInteractionId(event.transaction.hash, counter);
   
@@ -266,12 +371,12 @@ ponder.on("DepositPoolStETH:UserWithdrawn", async ({ event, context }: any) => {
     blockNumber: event.block.number,
     blockTimestamp: event.block.timestamp,
     transactionHash: event.transaction.hash,
-    userId: userRecord.id,
+    user: userRecord.id, // FIXED: "user" field name for GraphQL compatibility
     type: 1n, // WITHDRAW = 1
     amount: amount,
     depositPool: depositPoolAddress,
-    totalStaked: pool.totalStaked - amount,
-    rate: 0n, // TODO: Calculate rate based on contract logic
+    totalStaked: pool.totalStaked - amount, // Keep original event-based calculation
+    rate: userRate, // Phase 4.2: Real rate instead of 0n
   });
 });
 
@@ -293,7 +398,10 @@ ponder.on("DepositPoolStETH:UserClaimed", async ({ event, context }: any) => {
     })
     .where(eq(user.id, userRecord.id));
 
-  // Get interaction counter and create pool interaction
+  // Get user's rate from contract (Phase 4.2 improvement)
+  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+
+  // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
   const interactionId = createPoolInteractionId(event.transaction.hash, counter);
   
@@ -302,12 +410,12 @@ ponder.on("DepositPoolStETH:UserClaimed", async ({ event, context }: any) => {
     blockNumber: event.block.number,
     blockTimestamp: event.block.timestamp,
     transactionHash: event.transaction.hash,
-    userId: userRecord.id,
+    user: userRecord.id, // FIXED: "user" field name for GraphQL compatibility
     type: 2n, // CLAIM = 2
     amount: amount,
     depositPool: depositPoolAddress,
-    totalStaked: pool.totalStaked, // No change to total staked on claim
-    rate: 0n, // TODO: Calculate rate based on contract logic
+    totalStaked: pool.totalStaked, // No change to total staked on claim (original logic)
+    rate: userRate, // Phase 4.2: Real rate instead of 0n
   });
 });
 
@@ -345,8 +453,8 @@ ponder.on("DepositPoolStETH:UserReferred", async ({ event, context }: any) => {
   const referralId = createUserId(user, referrerAddress, rewardPoolIndex); // user.id + referrer.id equivalent
   await context.db.insert(referral).values({
     id: referralId,
-    referralUserId: referralUserRecord.id,
-    referrerId: referrerRecord[0].id,
+    referral: referralUserRecord.id, // FIXED: "referral" field name for GraphQL compatibility
+    referrer: referrerRecord[0].id, // FIXED: "referrer" field name for GraphQL compatibility
     referralAddress: user,
     referrerAddress: referrerAddress,
     amount: amount,
@@ -451,6 +559,10 @@ ponder.on("DepositPoolWBTC:UserStaked", async ({ event, context }: any) => {
     })
     .where(eq(depositPool.id, pool.id));
 
+  // Get user's rate from contract (Phase 4.2 improvement)
+  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+
+  // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
   const interactionId = createPoolInteractionId(event.transaction.hash, counter);
   
@@ -459,12 +571,12 @@ ponder.on("DepositPoolWBTC:UserStaked", async ({ event, context }: any) => {
     blockNumber: event.block.number,
     blockTimestamp: event.block.timestamp,
     transactionHash: event.transaction.hash,
-    userId: userRecord.id,
+    user: userRecord.id, // FIXED: "user" field name for GraphQL compatibility
     type: 0n, // STAKE = 0
     amount: amount,
     depositPool: depositPoolAddress,
-    totalStaked: pool.totalStaked + amount,
-    rate: 0n,
+    totalStaked: pool.totalStaked + amount, // Keep original event-based calculation
+    rate: userRate, // Phase 4.2: Real rate instead of 0n
   });
 });
 
@@ -489,6 +601,10 @@ ponder.on("DepositPoolWBTC:UserWithdrawn", async ({ event, context }: any) => {
     })
     .where(eq(depositPool.id, pool.id));
 
+  // Get user's rate from contract (Phase 4.2 improvement)
+  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+
+  // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
   const interactionId = createPoolInteractionId(event.transaction.hash, counter);
   
@@ -497,12 +613,12 @@ ponder.on("DepositPoolWBTC:UserWithdrawn", async ({ event, context }: any) => {
     blockNumber: event.block.number,
     blockTimestamp: event.block.timestamp,
     transactionHash: event.transaction.hash,
-    userId: userRecord.id,
+    user: userRecord.id, // FIXED: "user" field name for GraphQL compatibility
     type: 1n, // WITHDRAW = 1
     amount: amount,
     depositPool: depositPoolAddress,
-    totalStaked: pool.totalStaked - amount,
-    rate: 0n,
+    totalStaked: pool.totalStaked - amount, // Keep original event-based calculation
+    rate: userRate, // Phase 4.2: Real rate instead of 0n
   });
 });
 
@@ -520,6 +636,10 @@ ponder.on("DepositPoolWBTC:UserClaimed", async ({ event, context }: any) => {
     })
     .where(eq(user.id, userRecord.id));
 
+  // Get user's rate from contract (Phase 4.2 improvement)
+  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+
+  // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
   const interactionId = createPoolInteractionId(event.transaction.hash, counter);
   
@@ -528,12 +648,12 @@ ponder.on("DepositPoolWBTC:UserClaimed", async ({ event, context }: any) => {
     blockNumber: event.block.number,
     blockTimestamp: event.block.timestamp,
     transactionHash: event.transaction.hash,
-    userId: userRecord.id,
+    user: userRecord.id, // FIXED: "user" field name for GraphQL compatibility
     type: 2n, // CLAIM = 2
     amount: amount,
     depositPool: depositPoolAddress,
-    totalStaked: pool.totalStaked,
-    rate: 0n,
+    totalStaked: pool.totalStaked, // No change to total staked on claim (original logic)
+    rate: userRate, // Phase 4.2: Real rate instead of 0n
   });
 });
 
@@ -568,8 +688,8 @@ ponder.on("DepositPoolWBTC:UserReferred", async ({ event, context }: any) => {
   const referralId = createUserId(user, referrerAddress, rewardPoolIndex);
   await context.db.insert(referral).values({
     id: referralId,
-    referralUserId: referralUserRecord.id,
-    referrerId: referrerRecord[0].id,
+    referral: referralUserRecord.id, // FIXED: "referral" field name for GraphQL compatibility
+    referrer: referrerRecord[0].id, // FIXED: "referrer" field name for GraphQL compatibility
     referralAddress: user,
     referrerAddress: referrerAddress,
     amount: amount,
@@ -672,6 +792,10 @@ ponder.on("DepositPoolWETH:UserStaked", async ({ event, context }: any) => {
     })
     .where(eq(depositPool.id, pool.id));
 
+  // Get user's rate from contract (Phase 4.2 improvement)
+  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+
+  // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
   const interactionId = createPoolInteractionId(event.transaction.hash, counter);
   
@@ -680,12 +804,12 @@ ponder.on("DepositPoolWETH:UserStaked", async ({ event, context }: any) => {
     blockNumber: event.block.number,
     blockTimestamp: event.block.timestamp,
     transactionHash: event.transaction.hash,
-    userId: userRecord.id,
-    type: 0n,
+    user: userRecord.id, // FIXED: "user" field name for GraphQL compatibility
+    type: 0n, // STAKE = 0
     amount: amount,
     depositPool: depositPoolAddress,
-    totalStaked: pool.totalStaked + amount,
-    rate: 0n,
+    totalStaked: pool.totalStaked + amount, // Keep original event-based calculation
+    rate: userRate, // Phase 4.2: Real rate instead of 0n
   });
 });
 
@@ -710,6 +834,10 @@ ponder.on("DepositPoolWETH:UserWithdrawn", async ({ event, context }: any) => {
     })
     .where(eq(depositPool.id, pool.id));
 
+  // Get user's rate from contract (Phase 4.2 improvement)
+  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+
+  // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
   const interactionId = createPoolInteractionId(event.transaction.hash, counter);
   
@@ -718,12 +846,12 @@ ponder.on("DepositPoolWETH:UserWithdrawn", async ({ event, context }: any) => {
     blockNumber: event.block.number,
     blockTimestamp: event.block.timestamp,
     transactionHash: event.transaction.hash,
-    userId: userRecord.id,
-    type: 1n,
+    user: userRecord.id, // FIXED: "user" field name for GraphQL compatibility
+    type: 1n, // WITHDRAW = 1
     amount: amount,
     depositPool: depositPoolAddress,
-    totalStaked: pool.totalStaked - amount,
-    rate: 0n,
+    totalStaked: pool.totalStaked - amount, // Keep original event-based calculation
+    rate: userRate, // Phase 4.2: Real rate instead of 0n
   });
 });
 
@@ -741,6 +869,10 @@ ponder.on("DepositPoolWETH:UserClaimed", async ({ event, context }: any) => {
     })
     .where(eq(user.id, userRecord.id));
 
+  // Get user's rate from contract (Phase 4.2 improvement)
+  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+
+  // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
   const interactionId = createPoolInteractionId(event.transaction.hash, counter);
   
@@ -749,12 +881,12 @@ ponder.on("DepositPoolWETH:UserClaimed", async ({ event, context }: any) => {
     blockNumber: event.block.number,
     blockTimestamp: event.block.timestamp,
     transactionHash: event.transaction.hash,
-    userId: userRecord.id,
-    type: 2n,
+    user: userRecord.id, // FIXED: "user" field name for GraphQL compatibility
+    type: 2n, // CLAIM = 2
     amount: amount,
     depositPool: depositPoolAddress,
-    totalStaked: pool.totalStaked,
-    rate: 0n,
+    totalStaked: pool.totalStaked, // No change to total staked on claim (original logic)
+    rate: userRate, // Phase 4.2: Real rate instead of 0n
   });
 });
 
@@ -789,8 +921,8 @@ ponder.on("DepositPoolWETH:UserReferred", async ({ event, context }: any) => {
   const referralId = createUserId(user, referrerAddress, rewardPoolIndex);
   await context.db.insert(referral).values({
     id: referralId,
-    referralUserId: referralUserRecord.id,
-    referrerId: referrerRecord[0].id,
+    referral: referralUserRecord.id, // FIXED: "referral" field name for GraphQL compatibility
+    referrer: referrerRecord[0].id, // FIXED: "referrer" field name for GraphQL compatibility
     referralAddress: user,
     referrerAddress: referrerAddress,
     amount: amount,
@@ -893,6 +1025,10 @@ ponder.on("DepositPoolUSDC:UserStaked", async ({ event, context }: any) => {
     })
     .where(eq(depositPool.id, pool.id));
 
+  // Get user's rate from contract (Phase 4.2 improvement)
+  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+
+  // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
   const interactionId = createPoolInteractionId(event.transaction.hash, counter);
   
@@ -901,12 +1037,12 @@ ponder.on("DepositPoolUSDC:UserStaked", async ({ event, context }: any) => {
     blockNumber: event.block.number,
     blockTimestamp: event.block.timestamp,
     transactionHash: event.transaction.hash,
-    userId: userRecord.id,
-    type: 0n,
+    user: userRecord.id, // FIXED: "user" field name for GraphQL compatibility
+    type: 0n, // STAKE = 0
     amount: amount,
     depositPool: depositPoolAddress,
-    totalStaked: pool.totalStaked + amount,
-    rate: 0n,
+    totalStaked: pool.totalStaked + amount, // Keep original event-based calculation
+    rate: userRate, // Phase 4.2: Real rate instead of 0n
   });
 });
 
@@ -931,6 +1067,10 @@ ponder.on("DepositPoolUSDC:UserWithdrawn", async ({ event, context }: any) => {
     })
     .where(eq(depositPool.id, pool.id));
 
+  // Get user's rate from contract (Phase 4.2 improvement)
+  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+
+  // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
   const interactionId = createPoolInteractionId(event.transaction.hash, counter);
   
@@ -939,12 +1079,12 @@ ponder.on("DepositPoolUSDC:UserWithdrawn", async ({ event, context }: any) => {
     blockNumber: event.block.number,
     blockTimestamp: event.block.timestamp,
     transactionHash: event.transaction.hash,
-    userId: userRecord.id,
-    type: 1n,
+    user: userRecord.id, // FIXED: "user" field name for GraphQL compatibility
+    type: 1n, // WITHDRAW = 1
     amount: amount,
     depositPool: depositPoolAddress,
-    totalStaked: pool.totalStaked - amount,
-    rate: 0n,
+    totalStaked: pool.totalStaked - amount, // Keep original event-based calculation
+    rate: userRate, // Phase 4.2: Real rate instead of 0n
   });
 });
 
@@ -962,6 +1102,10 @@ ponder.on("DepositPoolUSDC:UserClaimed", async ({ event, context }: any) => {
     })
     .where(eq(user.id, userRecord.id));
 
+  // Get user's rate from contract (Phase 4.2 improvement)
+  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+
+  // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
   const interactionId = createPoolInteractionId(event.transaction.hash, counter);
   
@@ -970,12 +1114,12 @@ ponder.on("DepositPoolUSDC:UserClaimed", async ({ event, context }: any) => {
     blockNumber: event.block.number,
     blockTimestamp: event.block.timestamp,
     transactionHash: event.transaction.hash,
-    userId: userRecord.id,
-    type: 2n,
+    user: userRecord.id, // FIXED: "user" field name for GraphQL compatibility
+    type: 2n, // CLAIM = 2
     amount: amount,
     depositPool: depositPoolAddress,
-    totalStaked: pool.totalStaked,
-    rate: 0n,
+    totalStaked: pool.totalStaked, // No change to total staked on claim (original logic)
+    rate: userRate, // Phase 4.2: Real rate instead of 0n
   });
 });
 
@@ -1010,8 +1154,8 @@ ponder.on("DepositPoolUSDC:UserReferred", async ({ event, context }: any) => {
   const referralId = createUserId(user, referrerAddress, rewardPoolIndex);
   await context.db.insert(referral).values({
     id: referralId,
-    referralUserId: referralUserRecord.id,
-    referrerId: referrerRecord[0].id,
+    referral: referralUserRecord.id, // FIXED: "referral" field name for GraphQL compatibility
+    referrer: referrerRecord[0].id, // FIXED: "referrer" field name for GraphQL compatibility
     referralAddress: user,
     referrerAddress: referrerAddress,
     amount: amount,
@@ -1114,6 +1258,10 @@ ponder.on("DepositPoolUSDT:UserStaked", async ({ event, context }: any) => {
     })
     .where(eq(depositPool.id, pool.id));
 
+  // Get user's rate from contract (Phase 4.2 improvement)
+  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+
+  // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
   const interactionId = createPoolInteractionId(event.transaction.hash, counter);
   
@@ -1122,12 +1270,12 @@ ponder.on("DepositPoolUSDT:UserStaked", async ({ event, context }: any) => {
     blockNumber: event.block.number,
     blockTimestamp: event.block.timestamp,
     transactionHash: event.transaction.hash,
-    userId: userRecord.id,
-    type: 0n,
+    user: userRecord.id, // FIXED: "user" field name for GraphQL compatibility
+    type: 0n, // STAKE = 0
     amount: amount,
     depositPool: depositPoolAddress,
-    totalStaked: pool.totalStaked + amount,
-    rate: 0n,
+    totalStaked: pool.totalStaked + amount, // Keep original event-based calculation
+    rate: userRate, // Phase 4.2: Real rate instead of 0n
   });
 });
 
@@ -1152,6 +1300,10 @@ ponder.on("DepositPoolUSDT:UserWithdrawn", async ({ event, context }: any) => {
     })
     .where(eq(depositPool.id, pool.id));
 
+  // Get user's rate from contract (Phase 4.2 improvement)
+  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+
+  // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
   const interactionId = createPoolInteractionId(event.transaction.hash, counter);
   
@@ -1160,12 +1312,12 @@ ponder.on("DepositPoolUSDT:UserWithdrawn", async ({ event, context }: any) => {
     blockNumber: event.block.number,
     blockTimestamp: event.block.timestamp,
     transactionHash: event.transaction.hash,
-    userId: userRecord.id,
-    type: 1n,
+    user: userRecord.id, // FIXED: "user" field name for GraphQL compatibility
+    type: 1n, // WITHDRAW = 1
     amount: amount,
     depositPool: depositPoolAddress,
-    totalStaked: pool.totalStaked - amount,
-    rate: 0n,
+    totalStaked: pool.totalStaked - amount, // Keep original event-based calculation
+    rate: userRate, // Phase 4.2: Real rate instead of 0n
   });
 });
 
@@ -1183,6 +1335,10 @@ ponder.on("DepositPoolUSDT:UserClaimed", async ({ event, context }: any) => {
     })
     .where(eq(user.id, userRecord.id));
 
+  // Get user's rate from contract (Phase 4.2 improvement)
+  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+
+  // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
   const interactionId = createPoolInteractionId(event.transaction.hash, counter);
   
@@ -1191,12 +1347,12 @@ ponder.on("DepositPoolUSDT:UserClaimed", async ({ event, context }: any) => {
     blockNumber: event.block.number,
     blockTimestamp: event.block.timestamp,
     transactionHash: event.transaction.hash,
-    userId: userRecord.id,
-    type: 2n,
+    user: userRecord.id, // FIXED: "user" field name for GraphQL compatibility
+    type: 2n, // CLAIM = 2
     amount: amount,
     depositPool: depositPoolAddress,
-    totalStaked: pool.totalStaked,
-    rate: 0n,
+    totalStaked: pool.totalStaked, // No change to total staked on claim (original logic)
+    rate: userRate, // Phase 4.2: Real rate instead of 0n
   });
 });
 
@@ -1231,8 +1387,8 @@ ponder.on("DepositPoolUSDT:UserReferred", async ({ event, context }: any) => {
   const referralId = createUserId(user, referrerAddress, rewardPoolIndex);
   await context.db.insert(referral).values({
     id: referralId,
-    referralUserId: referralUserRecord.id,
-    referrerId: referrerRecord[0].id,
+    referral: referralUserRecord.id, // FIXED: "referral" field name for GraphQL compatibility
+    referrer: referrerRecord[0].id, // FIXED: "referrer" field name for GraphQL compatibility
     referralAddress: user,
     referrerAddress: referrerAddress,
     amount: amount,
