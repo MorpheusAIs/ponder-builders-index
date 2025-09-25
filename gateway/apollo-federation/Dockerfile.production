@@ -1,0 +1,72 @@
+# Multi-stage Dockerfile for Apollo Federation Gateway
+# Build stage
+FROM node:18-alpine AS builder
+
+# Set working directory
+WORKDIR /workspace
+
+# Install pnpm
+RUN npm install -g pnpm@8
+
+# Copy package files for dependency installation
+COPY package*.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY gateway/apollo-federation/package.json ./gateway/apollo-federation/
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile --production=false
+
+# Copy source code
+COPY gateway/apollo-federation/ ./gateway/apollo-federation/
+
+# Build the gateway
+RUN pnpm --filter apollo-federation build
+
+# Production stage
+FROM node:18-alpine AS production
+
+# Install dumb-init for proper signal handling
+RUN apk add --no-cache dumb-init
+
+# Create non-root user
+RUN addgroup -g 1001 -S apollo && \
+    adduser -S apollo -u 1001
+
+# Set working directory
+WORKDIR /app
+
+# Install pnpm
+RUN npm install -g pnpm@8
+
+# Copy package files
+COPY package*.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY gateway/apollo-federation/package.json ./gateway/apollo-federation/
+
+# Install production dependencies only
+RUN pnpm install --frozen-lockfile --production=true
+
+# Copy built application
+COPY --from=builder --chown=apollo:apollo /workspace/gateway/apollo-federation/dist ./gateway/apollo-federation/dist
+COPY --from=builder --chown=apollo:apollo /workspace/gateway/apollo-federation/src ./gateway/apollo-federation/src
+COPY --from=builder --chown=apollo:apollo /workspace/gateway/apollo-federation/supergraph.yaml ./gateway/apollo-federation/
+
+# Set ownership
+RUN chown -R apollo:apollo /app
+
+# Switch to non-root user
+USER apollo
+
+# Expose port
+EXPOSE 4000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:4000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"
+
+# Set working directory to the gateway
+WORKDIR /app/gateway/apollo-federation
+
+# Use dumb-init to handle signals properly
+ENTRYPOINT ["dumb-init", "--"]
+
+# Start the application
+CMD ["pnpm", "start"]
