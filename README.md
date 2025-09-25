@@ -64,6 +64,7 @@ This monorepo follows the recommended Ponder architecture pattern with:
 ### Current GraphQL Endpoints
 - **Base**: `https://subgraph.satsuma-prod.com/8675f21b07ed/9iqb9f4qcmhosiruyg763--465704/morpheus-mainnet-base/api`
 - **Arbitrum**: `https://api.studio.thegraph.com/query/73688/morpheus-mainnet-arbitrum/version/latest`
+- **Capital**: `https://api.studio.thegraph.com/query/73688/morpheus-mainnet-v-2/version/latest`
 
 ## Getting Started
 
@@ -84,7 +85,8 @@ cd ponder-builders-index
 2. **Configure your RPC endpoints**:
 ```bash
 # Edit the generated .env files with your own RPC URLs
-# apps/ponder-builders/.env - Add your Alchemy/Infura/QuickNode URLs
+# apps/ponder-builders/.env - Add your Arbitrum & Base RPC URLs
+# apps/ponder-capital/.env - Add your Ethereum mainnet & Arbitrum RPC URLs
 # gateway/apollo-federation/.env - Configure federation endpoints
 ```
 
@@ -128,6 +130,19 @@ Each Ponder app is independently deployable but shares common configuration:
 - **Hot reload**: Development servers with automatic code reloading
 - **Type safety**: Full TypeScript support with generated types
 
+### Capital Indexer Features
+
+The **ponder-capital** indexer provides complete coverage of MorpheusAI's capital staking system:
+
+- **✅ Multi-Pool Support**: Indexes all 5 deposit pools (stETH, WBTC, WETH, USDC, USDT)
+- **✅ Complete Event Coverage**: 55+ event handlers covering all user interactions
+- **✅ Cross-Chain Messaging**: L1↔L2 message tracking between Ethereum and Arbitrum
+- **✅ Referral System**: Full referrer/referral relationship tracking
+- **✅ Proxy Contract Monitoring**: Administrative and upgrade event tracking  
+- **✅ Dynamic Pool Discovery**: Factory pattern for future deposit pool additions
+- **✅ Subgraph Compatibility**: 100% compatible with existing GraphQL queries
+- **✅ Real-time Updates**: Live tracking of stakes, withdrawals, and reward claims
+
 ## Deployment
 
 Production deployment uses:
@@ -139,20 +154,74 @@ Production deployment uses:
 
 ## Migration Strategy
 
-The migration from existing subgraphs follows a phased approach:
+The migration from existing subgraphs follows a phased approach using Apollo Federation for zero-downtime transitions:
+
+### **🔄 Migration Phases**
 
 1. **Phase 1**: Deploy Ponder indexers alongside existing subgraphs
 2. **Phase 2**: Set up Apollo Federation combining both data sources
 3. **Phase 3**: Gradually migrate queries from legacy subgraphs to Ponder
 4. **Phase 4**: Decommission legacy subgraphs when migration is complete
 
+### **⚡ Apollo Federation Query Routing**
+
+During migration, the Apollo Gateway intelligently routes queries:
+
+```
+Frontend Query → Apollo Gateway → Decision Logic:
+                                ↓
+                    ┌─ ponder-builders (new data)
+                    ├─ ponder-capital (new data) 
+                    ├─ arbitrum-legacy (fallback)
+                    ├─ base-legacy (fallback)
+                    └─ capital-legacy (fallback)
+```
+
+### **🎯 Technical Implementation**
+
+The `supergraph.yaml` configuration enables gradual migration:
+
+```yaml
+# New Ponder indexers (target endpoints)
+ponder-capital:
+  routing_url: http://localhost:42070/graphql
+
+# Legacy subgraphs (safety fallback during migration)  
+arbitrum-legacy:
+  routing_url: https://api.studio.thegraph.com/query/73688/morpheus-mainnet-arbitrum/version/latest
+capital-legacy:
+  routing_url: https://api.studio.thegraph.com/query/73688/morpheus-mainnet-v-2/version/latest
+```
+
+**Query Routing Logic:**
+- **New entity types** (capital deposit pools) → Always route to `ponder-capital`
+- **Existing entities** → Gradually shift from legacy to Ponder based on confidence
+- **Schema overlap** → Federation decides optimal routing for performance
+
+### **🛡️ Safety Benefits**
+
+- **✅ Zero Downtime**: Frontend applications continue working unchanged
+- **✅ Instant Rollback**: Can immediately revert to legacy if issues arise
+- **✅ A/B Testing**: Compare results between old and new indexers
+- **✅ Data Validation**: Verify consistency during parallel operation
+- **✅ Gradual Confidence**: Increase Ponder usage as reliability is proven
+
+### **📊 Migration Monitoring**
+
+During transition, monitor:
+- Query response times for both systems
+- Data consistency between legacy and Ponder
+- Error rates and system health
+- Gradual traffic shifting metrics
+
 ## Development Notes
 
 ### Environment Configuration
 - **`.env` files are gitignored** - they contain sensitive RPC URLs and database credentials
-- **Setup script creates `.env` files** automatically with template values
+- **Setup script creates `.env` files** automatically with template values for both indexers
 - **Update RPC URLs** before starting development - default public RPCs may be rate-limited
 - **Use production RPC providers** (Alchemy, Infura, QuickNode) for reliable indexing
+- **Different RPC requirements**: Builders needs Arbitrum+Base, Capital needs Ethereum+Arbitrum
 
 ### Git Configuration
 The repository includes a comprehensive `.gitignore` that excludes:
@@ -172,5 +241,6 @@ The repository includes a comprehensive `.gitignore` that excludes:
 ## Documentation
 
 - [Builders Contracts Documentation](./docs/builders%20contracts.md)
+- [Capital Implementation Plan](./PONDER_CAPITAL_IMPLEMENTATION_PLAN.md)
 - [Ponder Architecture Brief](./docs/Ponder%20architecture%20brief.md)
 - [Complete Architecture Guide](./docs/Ponder%20Blockchain%20Indexing%20Architectur.md)

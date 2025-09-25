@@ -3,21 +3,35 @@ federation_version: 2
 
 subgraphs:
   ponder-builders:
-    # Ponder GraphQL endpoint for builders data
+    # Ponder GraphQL endpoint for builders staking data (Arbitrum/Base)
     routing_url: http://localhost:42069/graphql
     schema:
       # In development, introspection will be used
       # In production, provide the SDL file path
       subgraph_url: http://localhost:42069/graphql
   
-  arbitrum-legacy:
-    # Existing Arbitrum subgraph
-    routing_url: https://api.studio.thegraph.com/query/73688/lumerin-node/version/latest
+  ponder-capital:
+    # Ponder GraphQL endpoint for capital deposit pools data (Ethereum/Arbitrum)
+    routing_url: http://localhost:42070/graphql
     schema:
-      subgraph_url: https://api.studio.thegraph.com/query/73688/lumerin-node/version/latest
+      # In development, introspection will be used
+      # In production, provide the SDL file path
+      subgraph_url: http://localhost:42070/graphql
+  
+  arbitrum-legacy:
+    # Existing Arbitrum subgraph (legacy - will be deprecated)
+    routing_url: https://api.studio.thegraph.com/query/73688/morpheus-mainnet-arbitrum/version/latest
+    schema:
+      subgraph_url: https://api.studio.thegraph.com/query/73688/morpheus-mainnet-arbitrum/version/latest
   
   base-legacy:
-    # Existing Base subgraph
+    # Existing Base subgraph (legacy - will be deprecated)
     routing_url: https://subgraph.satsuma-prod.com/8675f21b07ed/9iqb9f4qcmhosiruyg763--465704/morpheus-mainnet-base/api
     schema:
       subgraph_url: https://subgraph.satsuma-prod.com/8675f21b07ed/9iqb9f4qcmhosiruyg763--465704/morpheus-mainnet-base/api
+  
+  capital-legacy:
+    # Existing Capital subgraph (legacy - will be deprecated)
+    routing_url: https://api.studio.thegraph.com/query/73688/morpheus-mainnet-v-2/version/latest
+    schema:
+      subgraph_url: https://api.studio.thegraph.com/query/73688/morpheus-mainnet-v-2/version/latest
