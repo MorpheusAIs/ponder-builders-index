@@ -54,10 +54,10 @@ services:
   - key: PONDER_LOG_LEVEL
     value: info
   - key: PONDER_RPC_URL_42161
-    value: ${ARBITRUM_RPC_URL}
+    value: "https://arb-mainnet.g.alchemy.com/v2/8hD3GpBjP6k2a5rdlPNSy"
     type: SECRET
   - key: PONDER_RPC_URL_8453
-    value: ${BASE_RPC_URL}
+    value: "https://api.noderpc.xyz/rpc-base-mainnet/_M2px5r8-_azU1pKiJUscsbtCPEgnfkl7HBu1egQRvM"
     type: SECRET
 
 # Ponder Capital Service - Handles Ethereum mainnet & Arbitrum capital flows
@@ -97,10 +97,10 @@ services:
   - key: PONDER_LOG_LEVEL
     value: info
   - key: PONDER_RPC_URL_1
-    value: ${ETHEREUM_RPC_URL}
+    value: "https://api.noderpc.xyz/rpc-mainnet/_M2px5r8-_azU1pKiJUscsbtCPEgnfkl7HBu1egQRvM"
     type: SECRET
   - key: PONDER_RPC_URL_42161
-    value: ${ARBITRUM_RPC_URL}
+    value: "https://arb-mainnet.g.alchemy.com/v2/8hD3GpBjP6k2a5rdlPNSy"
     type: SECRET
 
 # Apollo Federation Gateway - GraphQL API aggregation
