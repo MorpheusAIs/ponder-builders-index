@@ -15,7 +15,7 @@ const gateway = new ApolloGateway({
       {
         name: 'arbitrum-legacy',
         url: process.env.ARBITRUM_SUBGRAPH_URL || 
-             'https://api.studio.thegraph.com/query/73688/lumerin-node/version/latest',
+             'https://api.studio.thegraph.com/query/73688/morpheus-mainnet-arbitrum/version/latest',
       },
       // Existing Base subgraph  
       {
@@ -32,17 +32,15 @@ const gateway = new ApolloGateway({
 // Create Apollo Server with the gateway
 const server = new ApolloServer({
   gateway,
-  // Enable subscription support if needed
-  subscriptions: false,
   // Add context function for authentication/logging
   plugins: [
     {
-      requestDidStart() {
+      async requestDidStart(requestContext: any) {
         return {
-          didResolveOperation(requestContext) {
+          async didResolveOperation(requestContext: any) {
             console.log(`🔍 Operation: ${requestContext.request.operationName}`);
           },
-          didEncounterErrors(requestContext) {
+          async didEncounterErrors(requestContext: any) {
             console.error('❌ Errors:', requestContext.errors);
           },
         };
@@ -70,7 +68,7 @@ async function startServer() {
     // Log federated services
     console.log('\n📡 Federated Services:');
     console.log('  - ponder-builders:', process.env.PONDER_BUILDERS_URL || 'http://localhost:42069/graphql');
-    console.log('  - arbitrum-legacy:', process.env.ARBITRUM_SUBGRAPH_URL || 'https://api.studio.thegraph.com/query/73688/lumerin-node/version/latest');
+    console.log('  - arbitrum-legacy:', process.env.ARBITRUM_SUBGRAPH_URL || 'https://api.studio.thegraph.com/query/73688/morpheus-mainnet-arbitrum/version/latest');
     console.log('  - base-legacy:', process.env.BASE_SUBGRAPH_URL || 'https://subgraph.satsuma-prod.com/8675f21b07ed/9iqb9f4qcmhosiruyg763--465704/morpheus-mainnet-base/api');
     
   } catch (error) {
