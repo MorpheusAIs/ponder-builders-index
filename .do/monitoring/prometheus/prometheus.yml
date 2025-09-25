@@ -48,47 +48,41 @@ scrape_configs:
     scrape_interval: 15s
     scrape_timeout: 10s
 
-  # Ponder Builders Service - Arbitrum & Base chains
+  # Ponder Builders Service - Arbitrum & Base chains (Production)
   - job_name: 'ponder-builders'
     static_configs:
-      - targets: ['ponder-builders:42069']
-    metrics_path: /metrics
+      - targets: ['morpheusai-ponder-monorepo-63c6163e.ondigitalocean.app']
+    metrics_path: /builders/metrics
     scrape_interval: 15s
     scrape_timeout: 10s
+    scheme: https
     params:
       format: ['prometheus']  # Request Prometheus format if available
     relabel_configs:
-      - source_labels: [__address__]
-        target_label: __param_target
-      - source_labels: [__param_target]
-        target_label: instance
-      - target_label: __address__
-        replacement: 'ponder-builders:42069'  # The actual target
       - target_label: service
         replacement: 'ponder-builders'
       - target_label: chains
         replacement: 'arbitrum,base'
+      - target_label: environment
+        replacement: 'production'
 
-  # Ponder Capital Service - Ethereum mainnet & Arbitrum
+  # Ponder Capital Service - Ethereum mainnet & Arbitrum (Production)
   - job_name: 'ponder-capital'
     static_configs:
-      - targets: ['ponder-capital:42069']
-    metrics_path: /metrics
+      - targets: ['morpheusai-ponder-monorepo-63c6163e.ondigitalocean.app']
+    metrics_path: /capital/metrics
     scrape_interval: 15s
     scrape_timeout: 10s
+    scheme: https
     params:
       format: ['prometheus']
     relabel_configs:
-      - source_labels: [__address__]
-        target_label: __param_target
-      - source_labels: [__param_target]
-        target_label: instance
-      - target_label: __address__
-        replacement: 'ponder-capital:42069'
       - target_label: service
         replacement: 'ponder-capital'
       - target_label: chains
         replacement: 'ethereum,arbitrum'
+      - target_label: environment
+        replacement: 'production'
 
   # Ponder Subnets Service (when available)
   - job_name: 'ponder-subnets'
@@ -103,16 +97,19 @@ scrape_configs:
       - target_label: service
         replacement: 'ponder-subnets'
 
-  # Apollo Federation Gateway
+  # Apollo Federation Gateway (Production)
   - job_name: 'apollo-gateway'
     static_configs:
-      - targets: ['apollo-gateway:4000']
+      - targets: ['morpheusai-ponder-monorepo-63c6163e.ondigitalocean.app']
     metrics_path: /metrics
     scrape_interval: 15s
     scrape_timeout: 10s
+    scheme: https
     relabel_configs:
       - target_label: service
         replacement: 'apollo-gateway'
+      - target_label: environment
+        replacement: 'production'
 
   # PostgreSQL Database Metrics (if postgres_exporter is available)
   - job_name: 'postgres'
@@ -152,8 +149,5 @@ scrape_configs:
 # Retention time is set via command line: --storage.tsdb.retention.time=30d
 # For DigitalOcean droplets, consider adjusting retention based on available storage
 
-# Global limits to prevent resource exhaustion
-# These are sensible defaults for a medium-sized Ponder deployment
-global_limits:
-  max_series: 1000000     # Maximum number of time series
-  max_samples_per_query: 50000000  # Maximum samples per query
+# Global limits are configured via command line parameters
+# --storage.tsdb.retention.time=30d is set in docker-compose

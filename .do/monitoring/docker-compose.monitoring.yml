@@ -6,8 +6,7 @@ networks:
   monitoring:
     driver: bridge
   ponder:
-    external: true
-    name: ponder_monitoring
+    driver: bridge
 
 volumes:
   prometheus_data:
@@ -135,7 +134,7 @@ services:
     container_name: ponder_cadvisor
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "8081:8080"
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
