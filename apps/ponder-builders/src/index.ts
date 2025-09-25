@@ -44,7 +44,7 @@ const getOrCreateCounters = async (context: any) => {
 
 // Builders Contract Events
 
-ponder.on("Builders:BuilderPoolCreated", async ({ event, context }) => {
+ponder.on("Builders:BuilderPoolCreated", async ({ event, context }: any) => {
   const { poolId, name, admin } = event.args;
   
   // Read additional pool parameters from contract
@@ -94,7 +94,7 @@ ponder.on("Builders:BuilderPoolCreated", async ({ event, context }) => {
     .where(eq(counters.id, "global"));
 });
 
-ponder.on("Builders:Deposited", async ({ event, context }) => {
+ponder.on("Builders:Deposited", async ({ event, context }: any) => {
   const { user, builderPoolId, amount } = event.args;
   
   const userId = createUserId(builderPoolId, user);
@@ -166,7 +166,7 @@ ponder.on("Builders:Deposited", async ({ event, context }) => {
     .where(eq(buildersProject.id, builderPoolId));
 });
 
-ponder.on("Builders:Withdrawn", async ({ event, context }) => {
+ponder.on("Builders:Withdrawn", async ({ event, context }: any) => {
   const { user, builderPoolId, amount } = event.args;
   
   const userId = createUserId(builderPoolId, user);
@@ -219,7 +219,7 @@ ponder.on("Builders:Withdrawn", async ({ event, context }) => {
     .where(eq(buildersProject.id, builderPoolId));
 });
 
-ponder.on("Builders:Claimed", async ({ event, context }) => {
+ponder.on("Builders:Claimed", async ({ event, context }: any) => {
   const { user, builderPoolId, amount } = event.args;
   
   const userId = createUserId(builderPoolId, user);
@@ -269,18 +269,18 @@ ponder.on("Builders:Claimed", async ({ event, context }) => {
 });
 
 // MOR Token Transfer Events
-ponder.on("MorToken:Transfer", async ({ event, context }) => {
+ponder.on("MorToken:Transfer", async ({ event, context }: any) => {
   const { from, to, value } = event.args;
   
   // Check if this transfer is related to builders staking
   // (i.e., to/from the Builders contract addresses)
   const buildersAddresses = [
-    "0xC0eD68f163d44B6e9985F0041fDf6f67c6BCFF3f", // Arbitrum
-    "0x42BB446eAE6dca7723a9eBdb81EA88aFe77eF4B9", // Base
+    "0xC0eD68f163d44B6e9985F0041fDf6f67c6BCFF3f" as `0x${string}`, // Arbitrum
+    "0x42BB446eAE6dca7723a9eBdb81EA88aFe77eF4B9" as `0x${string}`, // Base
   ];
   
   const isStakingRelated = buildersAddresses.some(addr => 
-    isAddressEqual(to, addr) || isAddressEqual(from, addr)
+    isAddressEqual(to as `0x${string}`, addr) || isAddressEqual(from as `0x${string}`, addr)
   );
   
   let isStakingDeposit = false;
@@ -288,8 +288,8 @@ ponder.on("MorToken:Transfer", async ({ event, context }) => {
   let relatedProjectId = null;
   
   if (isStakingRelated) {
-    isStakingDeposit = buildersAddresses.some(addr => isAddressEqual(to, addr));
-    isStakingWithdraw = buildersAddresses.some(addr => isAddressEqual(from, addr));
+    isStakingDeposit = buildersAddresses.some(addr => isAddressEqual(to as `0x${string}`, addr));
+    isStakingWithdraw = buildersAddresses.some(addr => isAddressEqual(from as `0x${string}`, addr));
   }
 
   await context.db.insert(morTransfer).values({
@@ -309,7 +309,7 @@ ponder.on("MorToken:Transfer", async ({ event, context }) => {
 });
 
 // Factory Contract Events
-ponder.on("L2Factory:SubnetCreated", async ({ event, context }) => {
+ponder.on("L2Factory:SubnetCreated", async ({ event, context }: any) => {
   const { subnet, creator, salt } = event.args;
   
   await context.db.insert(dynamicSubnet).values({
@@ -333,7 +333,7 @@ ponder.on("L2Factory:SubnetCreated", async ({ event, context }) => {
     .where(eq(counters.id, "global"));
 });
 
-ponder.on("SubnetFactory:SubnetCreated", async ({ event, context }) => {
+ponder.on("SubnetFactory:SubnetCreated", async ({ event, context }: any) => {
   const { subnet, name, owner } = event.args;
   
   await context.db.insert(dynamicSubnet).values({
