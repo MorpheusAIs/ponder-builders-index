@@ -1,16 +1,33 @@
 import { createConfig, factory } from "ponder";
-import { parseAbiItem } from "viem";
+import { parseAbiItem, http } from "viem";
+import { loadBalance, rateLimit } from "ponder";
 import { DepositPoolAbi, DistributorAbi, L1SenderV2Abi, L2MessageReceiverAbi, ChainLinkDataConsumerAbi, RewardPoolAbi } from "../../packages/shared-abis/src/index.js";
 
 export default createConfig({
   chains: {
     mainnet: {
       id: 1,
-      rpc: process.env.PONDER_RPC_URL_1!,
+      rpc: loadBalance([
+        http(process.env.PONDER_RPC_URL_1!),
+        rateLimit(http("https://cloudflare-eth.com"), { 
+          requestsPerSecond: 25 
+        }),
+        rateLimit(http("https://ethereum-rpc.publicnode.com"), { 
+          requestsPerSecond: 10 
+        }),
+      ]),
     },
     arbitrum: {
       id: 42161, 
-      rpc: process.env.PONDER_RPC_URL_42161!,
+      rpc: loadBalance([
+        http(process.env.PONDER_RPC_URL_42161!),
+        rateLimit(http("https://arbitrum-one.public.blastapi.io"), { 
+          requestsPerSecond: 25 
+        }),
+        rateLimit(http("https://arbitrum-one-rpc.publicnode.com"), { 
+          requestsPerSecond: 10 
+        }),
+      ]),
     },
   },
   contracts: {

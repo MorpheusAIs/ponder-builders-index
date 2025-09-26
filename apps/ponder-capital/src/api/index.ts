@@ -144,7 +144,7 @@ app.get("/api/user/:userId/interactions", async (c: any) => {
     const interactions = await db
       .select()
       .from(schema.poolInteraction)
-      .where(eq(schema.poolInteraction.userId, userId))
+      .where(eq(schema.poolInteraction.user, userId))
       .orderBy([desc(schema.poolInteraction.blockTimestamp)])
       .limit(100);
 
