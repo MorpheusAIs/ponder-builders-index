@@ -1,5 +1,6 @@
 import { createConfig, factory } from "ponder";
-import { parseAbiItem } from "viem";
+import { parseAbiItem, http } from "viem";
+import { loadBalance, rateLimit } from "ponder";
 
 // Import ABIs from shared package
 import { BuildersAbi, ERC20Abi, L2FactoryAbi, SubnetFactoryAbi } from "../../packages/shared-abis/src/index.js";
@@ -8,11 +9,27 @@ export default createConfig({
   chains: {
     arbitrum: {
       id: 42161,
-      rpc: process.env.PONDER_RPC_URL_42161!,
+      rpc: loadBalance([
+        http(process.env.PONDER_RPC_URL_42161!),
+        rateLimit(http("https://arbitrum-one.public.blastapi.io"), { 
+          requestsPerSecond: 25 
+        }),
+        rateLimit(http("https://arbitrum-one-rpc.publicnode.com"), { 
+          requestsPerSecond: 10 
+        }),
+      ]),
     },
     base: {
       id: 8453,
-      rpc: process.env.PONDER_RPC_URL_8453!,
+      rpc: loadBalance([
+        http(process.env.PONDER_RPC_URL_8453!),
+        rateLimit(http("https://mainnet.base.org"), { 
+          requestsPerSecond: 25 
+        }),
+        rateLimit(http("https://base-rpc.publicnode.com"), { 
+          requestsPerSecond: 10 
+        }),
+      ]),
     },
   },
   contracts: {

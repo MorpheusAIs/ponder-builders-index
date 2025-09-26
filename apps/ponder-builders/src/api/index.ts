@@ -5,6 +5,9 @@ import { client, graphql } from "ponder";
 
 const app = new Hono();
 
+// Ready endpoint - check database connectivity (Ponder provides /health internally)
+
+
 app.use("/sql/*", client({ db, schema }));
 
 app.use("/", graphql({ db, schema }));
