@@ -125,7 +125,7 @@ app.get("/api/interactions", async (c: any) => {
       blockNumber: interaction.blockNumber.toString(),
       blockTimestamp: interaction.blockTimestamp.toString(),
       transactionHash: interaction.transactionHash,
-      userId: interaction.userId,
+      userId: interaction.user,
       type: interaction.type.toString(),
       amount: interaction.amount.toString(),
       depositPool: interaction.depositPool,
@@ -173,8 +173,8 @@ app.get("/api/referrals", async (c: any) => {
 
     return c.json(referrals.map((referral: any) => ({
       id: referral.id,
-      referralUserId: referral.referralUserId,
-      referrerId: referral.referrerId,
+      referralUserId: referral.referral,
+      referrerId: referral.referrer,
       referralAddress: referral.referralAddress,
       referrerAddress: referral.referrerAddress,
       amount: referral.amount.toString()

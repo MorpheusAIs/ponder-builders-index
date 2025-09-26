@@ -47,24 +47,19 @@ const createEventId = (txHash: `0x${string}`, logIndex: number): `0x${string}` =
 
 // Get or create interaction counter
 const getOrIncrementInteractionCount = async (txHash: `0x${string}`, context: any): Promise<number> => {
-  let counter = await context.db
-    .select()
-    .from(interactionCount)
-    .where(eq(interactionCount.id, txHash))
-    .limit(1);
+  let counter = await context.db.find(interactionCount, { id: txHash });
 
-  if (counter.length === 0) {
+  if (!counter) {
     await context.db.insert(interactionCount).values({
       id: txHash,
       count: 1n,
     });
     return 0; // First interaction is index 0
   } else {
-    const newCount = counter[0].count + 1n;
+    const newCount = counter.count + 1n;
     await context.db
-      .update(interactionCount)
-      .set({ count: newCount })
-      .where(eq(interactionCount.id, txHash));
+      .update(interactionCount, { id: txHash })
+      .set({ count: newCount });
     return Number(newCount - 1n); // Return previous count as index
   }
 };
@@ -73,13 +68,9 @@ const getOrIncrementInteractionCount = async (txHash: `0x${string}`, context: an
 const getOrCreateDepositPool = async (rewardPoolId: bigint, depositPoolAddress: `0x${string}`, context: any) => {
   const poolId = createDepositPoolId(rewardPoolId, depositPoolAddress);
   
-  let pool = await context.db
-    .select()
-    .from(depositPool)
-    .where(eq(depositPool.id, poolId))
-    .limit(1);
+  let pool = await context.db.find(depositPool, { id: poolId });
 
-  if (pool.length === 0) {
+  if (!pool) {
     await context.db.insert(depositPool).values({
       id: poolId,
       rewardPoolId,
@@ -87,27 +78,19 @@ const getOrCreateDepositPool = async (rewardPoolId: bigint, depositPoolAddress: 
       totalStaked: 0n,
     });
     
-    pool = await context.db
-      .select()
-      .from(depositPool)
-      .where(eq(depositPool.id, poolId))
-      .limit(1);
+    pool = await context.db.find(depositPool, { id: poolId });
   }
   
-  return pool[0];
+  return pool;
 };
 
 // Get or create user
 const getOrCreateUser = async (address: `0x${string}`, rewardPoolId: bigint, depositPoolAddress: `0x${string}`, context: any) => {
   const userId = createUserId(address, depositPoolAddress, rewardPoolId);
   
-  let userRecord = await context.db
-    .select()
-    .from(user)
-    .where(eq(user.id, userId))
-    .limit(1);
+  let userRecord = await context.db.find(user, { id: userId });
 
-  if (userRecord.length === 0) {
+  if (!userRecord) {
     await context.db.insert(user).values({
       id: userId,
       address,
@@ -117,14 +100,10 @@ const getOrCreateUser = async (address: `0x${string}`, rewardPoolId: bigint, dep
       claimed: 0n,
     });
     
-    userRecord = await context.db
-      .select()
-      .from(user)
-      .where(eq(user.id, userId))
-      .limit(1);
+    userRecord = await context.db.find(user, { id: userId });
   }
   
-  return userRecord[0];
+  return userRecord;
 };
 
 // Contract Data Fetching - Phase 4.2 Implementation
@@ -148,7 +127,7 @@ const getUserRate = async (depositPoolAddress: `0x${string}`, userAddress: `0x${
       address: depositPoolAddress,
       abi: DepositPoolAbi,
       functionName: "usersData",
-      args: [rewardPoolIndex, userAddress],
+      args: [userAddress, rewardPoolIndex],
     });
 
     // userData typically returns [staked, withdrawn, rate, claimed, referrer]
@@ -182,7 +161,7 @@ const getUserContractData = async (depositPoolAddress: `0x${string}`, userAddres
       address: depositPoolAddress,
       abi: DepositPoolAbi,
       functionName: "usersData",
-      args: [rewardPoolIndex, userAddress],
+      args: [userAddress, rewardPoolIndex],
     });
 
     // Parse the returned data structure
@@ -287,33 +266,57 @@ ponder.on("DepositPoolStETH:OwnershipTransferred", async ({ event, context }: an
 
 // Main deposit pool events
 ponder.on("DepositPoolStETH:UserStaked", async ({ event, context }: any) => {
-  const { rewardPoolIndex, user, amount } = event.args;
+  const { rewardPoolIndex, user: userAddress, amount } = event.args;
   const depositPoolAddress = event.log.address;
   
-  // Get or create deposit pool
-  const pool = await getOrCreateDepositPool(rewardPoolIndex, depositPoolAddress, context);
+  // Get or create deposit pool - using Ponder find API
+  const poolId = createDepositPoolId(rewardPoolIndex, depositPoolAddress);
+  let pool = await context.db.find(depositPool, { id: poolId });
+
+  if (!pool) {
+    await context.db.insert(depositPool).values({
+      id: poolId,
+      rewardPoolId: rewardPoolIndex,
+      depositPool: depositPoolAddress,
+      totalStaked: 0n,
+    });
+    
+    pool = await context.db.find(depositPool, { id: poolId });
+  }
   
-  // Get or create user
-  const userRecord = await getOrCreateUser(user, rewardPoolIndex, depositPoolAddress, context);
+  // Get or create user - using Ponder find API  
+  const userId = createUserId(userAddress, depositPoolAddress, rewardPoolIndex);
+  let userRecord = await context.db.find(user, { id: userId });
+
+  if (!userRecord) {
+    await context.db.insert(user).values({
+      id: userId,
+      address: userAddress,
+      rewardPoolId: rewardPoolIndex,
+      depositPool: depositPoolAddress,
+      staked: 0n,
+      claimed: 0n,
+    });
+    
+    userRecord = await context.db.find(user, { id: userId });
+  }
   
   // Update user staked amount
   await context.db
-    .update(user)
+    .update(user, { id: userRecord.id })
     .set({
       staked: userRecord.staked + amount,
-    })
-    .where(eq(user.id, userRecord.id));
+    });
 
   // Update pool total staked
   await context.db
-    .update(depositPool)
+    .update(depositPool, { id: pool.id })
     .set({
       totalStaked: pool.totalStaked + amount,
-    })
-    .where(eq(depositPool.id, pool.id));
+    });
 
   // Get user's rate from contract (Phase 4.2 improvement)
-  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+  const userRate = await getUserRate(depositPoolAddress, userAddress, rewardPoolIndex, context);
 
   // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
@@ -334,33 +337,31 @@ ponder.on("DepositPoolStETH:UserStaked", async ({ event, context }: any) => {
 });
 
 ponder.on("DepositPoolStETH:UserWithdrawn", async ({ event, context }: any) => {
-  const { rewardPoolIndex, user, amount } = event.args;
+  const { rewardPoolIndex, user: userAddress, amount } = event.args;
   const depositPoolAddress = event.log.address;
   
   // Get or create deposit pool
   const pool = await getOrCreateDepositPool(rewardPoolIndex, depositPoolAddress, context);
   
   // Get or create user
-  const userRecord = await getOrCreateUser(user, rewardPoolIndex, depositPoolAddress, context);
+  const userRecord = await getOrCreateUser(userAddress, rewardPoolIndex, depositPoolAddress, context);
   
   // Update user staked amount
   await context.db
-    .update(user)
+    .update(user, { id: userRecord.id })
     .set({
       staked: userRecord.staked - amount,
-    })
-    .where(eq(user.id, userRecord.id));
+    });
 
   // Update pool total staked
   await context.db
-    .update(depositPool)
+    .update(depositPool, { id: pool.id })
     .set({
       totalStaked: pool.totalStaked - amount,
-    })
-    .where(eq(depositPool.id, pool.id));
+    });
 
   // Get user's rate from contract (Phase 4.2 improvement)
-  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+  const userRate = await getUserRate(depositPoolAddress, userAddress, rewardPoolIndex, context);
 
   // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
@@ -381,25 +382,24 @@ ponder.on("DepositPoolStETH:UserWithdrawn", async ({ event, context }: any) => {
 });
 
 ponder.on("DepositPoolStETH:UserClaimed", async ({ event, context }: any) => {
-  const { rewardPoolIndex, user, receiver, amount } = event.args;
+  const { rewardPoolIndex, user: userAddress, receiver, amount } = event.args;
   const depositPoolAddress = event.log.address;
   
   // Get or create deposit pool
   const pool = await getOrCreateDepositPool(rewardPoolIndex, depositPoolAddress, context);
   
   // Get or create user
-  const userRecord = await getOrCreateUser(user, rewardPoolIndex, depositPoolAddress, context);
+  const userRecord = await getOrCreateUser(userAddress, rewardPoolIndex, depositPoolAddress, context);
   
   // Update user claimed amount
   await context.db
-    .update(user)
+    .update(user, { id: userRecord.id })
     .set({
       claimed: userRecord.claimed + amount,
-    })
-    .where(eq(user.id, userRecord.id));
+    });
 
   // Get user's rate from contract (Phase 4.2 improvement)
-  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+  const userRate = await getUserRate(depositPoolAddress, userAddress, rewardPoolIndex, context);
 
   // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
@@ -420,21 +420,23 @@ ponder.on("DepositPoolStETH:UserClaimed", async ({ event, context }: any) => {
 });
 
 ponder.on("DepositPoolStETH:UserReferred", async ({ event, context }: any) => {
-  const { rewardPoolIndex, user, referrer: referrerAddress, amount } = event.args;
+  const { rewardPoolIndex, user: userAddress, referrer: referrerAddress, amount } = event.args;
   const depositPoolAddress = event.log.address;
   
   // Get or create users
-  const referralUserRecord = await getOrCreateUser(user, rewardPoolIndex, depositPoolAddress, context);
+  const referralUserRecord = await getOrCreateUser(userAddress, rewardPoolIndex, depositPoolAddress, context);
   const referrerUserRecord = await getOrCreateUser(referrerAddress, rewardPoolIndex, depositPoolAddress, context);
   
   // Get or create referrer
-  let referrerRecord = await context.db
+  let referrerResults = await context.db
     .select()
     .from(referrer)
     .where(eq(referrer.userId, referrerUserRecord.id))
     .limit(1);
+    
+  let referrerRecord = referrerResults[0] || null;
 
-  if (referrerRecord.length === 0) {
+  if (!referrerRecord) {
     await context.db.insert(referrer).values({
       id: referrerUserRecord.id, // Same as user.id
       userId: referrerUserRecord.id,
@@ -442,20 +444,21 @@ ponder.on("DepositPoolStETH:UserReferred", async ({ event, context }: any) => {
       claimed: 0n,
     });
     
-    referrerRecord = await context.db
+    const newReferrerResults = await context.db
       .select()
       .from(referrer)
       .where(eq(referrer.userId, referrerUserRecord.id))
       .limit(1);
+    referrerRecord = newReferrerResults[0];
   }
   
   // Create referral record
-  const referralId = createUserId(user, referrerAddress, rewardPoolIndex); // user.id + referrer.id equivalent
+  const referralId = createUserId(userAddress, referrerAddress, rewardPoolIndex); // user.id + referrer.id equivalent
   await context.db.insert(referral).values({
     id: referralId,
     referral: referralUserRecord.id, // FIXED: "referral" field name for GraphQL compatibility
-    referrer: referrerRecord[0].id, // FIXED: "referrer" field name for GraphQL compatibility
-    referralAddress: user,
+    referrer: referrerRecord.id, // FIXED: "referrer" field name for GraphQL compatibility
+    referralAddress: userAddress,
     referrerAddress: referrerAddress,
     amount: amount,
   });
@@ -470,11 +473,10 @@ ponder.on("DepositPoolStETH:ReferrerClaimed", async ({ event, context }: any) =>
   
   // Update referrer claimed amount
   await context.db
-    .update(referrer)
+    .update(referrer, { userId: referrerUserRecord.id })
     .set({
       claimed: sql`${referrer.claimed} + ${amount}`,
-    })
-    .where(eq(referrer.userId, referrerUserRecord.id));
+    });
 });
 
 // =============================================================================
@@ -539,28 +541,26 @@ ponder.on("DepositPoolWBTC:OwnershipTransferred", async ({ event, context }: any
 });
 
 ponder.on("DepositPoolWBTC:UserStaked", async ({ event, context }: any) => {
-  const { rewardPoolIndex, user, amount } = event.args;
+  const { rewardPoolIndex, user: userAddress, amount } = event.args;
   const depositPoolAddress = event.log.address;
   
   const pool = await getOrCreateDepositPool(rewardPoolIndex, depositPoolAddress, context);
-  const userRecord = await getOrCreateUser(user, rewardPoolIndex, depositPoolAddress, context);
+  const userRecord = await getOrCreateUser(userAddress, rewardPoolIndex, depositPoolAddress, context);
   
   await context.db
-    .update(user)
+    .update(user, { id: userRecord.id })
     .set({
       staked: userRecord.staked + amount,
-    })
-    .where(eq(user.id, userRecord.id));
+    });
 
   await context.db
-    .update(depositPool)
+    .update(depositPool, { id: pool.id })
     .set({
       totalStaked: pool.totalStaked + amount,
-    })
-    .where(eq(depositPool.id, pool.id));
+    });
 
   // Get user's rate from contract (Phase 4.2 improvement)
-  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+  const userRate = await getUserRate(depositPoolAddress, userAddress, rewardPoolIndex, context);
 
   // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
@@ -581,28 +581,26 @@ ponder.on("DepositPoolWBTC:UserStaked", async ({ event, context }: any) => {
 });
 
 ponder.on("DepositPoolWBTC:UserWithdrawn", async ({ event, context }: any) => {
-  const { rewardPoolIndex, user, amount } = event.args;
+  const { rewardPoolIndex, user: userAddress, amount } = event.args;
   const depositPoolAddress = event.log.address;
   
   const pool = await getOrCreateDepositPool(rewardPoolIndex, depositPoolAddress, context);
-  const userRecord = await getOrCreateUser(user, rewardPoolIndex, depositPoolAddress, context);
+  const userRecord = await getOrCreateUser(userAddress, rewardPoolIndex, depositPoolAddress, context);
   
   await context.db
-    .update(user)
+    .update(user, { id: userRecord.id })
     .set({
       staked: userRecord.staked - amount,
-    })
-    .where(eq(user.id, userRecord.id));
+    });
 
   await context.db
-    .update(depositPool)
+    .update(depositPool, { id: pool.id })
     .set({
       totalStaked: pool.totalStaked - amount,
-    })
-    .where(eq(depositPool.id, pool.id));
+    });
 
   // Get user's rate from contract (Phase 4.2 improvement)
-  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+  const userRate = await getUserRate(depositPoolAddress, userAddress, rewardPoolIndex, context);
 
   // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
@@ -623,21 +621,20 @@ ponder.on("DepositPoolWBTC:UserWithdrawn", async ({ event, context }: any) => {
 });
 
 ponder.on("DepositPoolWBTC:UserClaimed", async ({ event, context }: any) => {
-  const { rewardPoolIndex, user, receiver, amount } = event.args;
+  const { rewardPoolIndex, user: userAddress, receiver, amount } = event.args;
   const depositPoolAddress = event.log.address;
   
   const pool = await getOrCreateDepositPool(rewardPoolIndex, depositPoolAddress, context);
-  const userRecord = await getOrCreateUser(user, rewardPoolIndex, depositPoolAddress, context);
+  const userRecord = await getOrCreateUser(userAddress, rewardPoolIndex, depositPoolAddress, context);
   
   await context.db
-    .update(user)
+    .update(user, { id: userRecord.id })
     .set({
       claimed: userRecord.claimed + amount,
-    })
-    .where(eq(user.id, userRecord.id));
+    });
 
   // Get user's rate from contract (Phase 4.2 improvement)
-  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+  const userRate = await getUserRate(depositPoolAddress, userAddress, rewardPoolIndex, context);
 
   // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
@@ -658,19 +655,21 @@ ponder.on("DepositPoolWBTC:UserClaimed", async ({ event, context }: any) => {
 });
 
 ponder.on("DepositPoolWBTC:UserReferred", async ({ event, context }: any) => {
-  const { rewardPoolIndex, user, referrer: referrerAddress, amount } = event.args;
+  const { rewardPoolIndex, user: userAddress, referrer: referrerAddress, amount } = event.args;
   const depositPoolAddress = event.log.address;
   
-  const referralUserRecord = await getOrCreateUser(user, rewardPoolIndex, depositPoolAddress, context);
+  const referralUserRecord = await getOrCreateUser(userAddress, rewardPoolIndex, depositPoolAddress, context);
   const referrerUserRecord = await getOrCreateUser(referrerAddress, rewardPoolIndex, depositPoolAddress, context);
   
-  let referrerRecord = await context.db
+  let referrerResults = await context.db
     .select()
     .from(referrer)
     .where(eq(referrer.userId, referrerUserRecord.id))
     .limit(1);
+    
+  let referrerRecord = referrerResults[0] || null;
 
-  if (referrerRecord.length === 0) {
+  if (!referrerRecord) {
     await context.db.insert(referrer).values({
       id: referrerUserRecord.id,
       userId: referrerUserRecord.id,
@@ -678,19 +677,20 @@ ponder.on("DepositPoolWBTC:UserReferred", async ({ event, context }: any) => {
       claimed: 0n,
     });
     
-    referrerRecord = await context.db
+    const newReferrerResults = await context.db
       .select()
       .from(referrer)
       .where(eq(referrer.userId, referrerUserRecord.id))
       .limit(1);
+    referrerRecord = newReferrerResults[0];
   }
   
-  const referralId = createUserId(user, referrerAddress, rewardPoolIndex);
+  const referralId = createUserId(userAddress, referrerAddress, rewardPoolIndex);
   await context.db.insert(referral).values({
     id: referralId,
     referral: referralUserRecord.id, // FIXED: "referral" field name for GraphQL compatibility
-    referrer: referrerRecord[0].id, // FIXED: "referrer" field name for GraphQL compatibility
-    referralAddress: user,
+    referrer: referrerRecord.id, // FIXED: "referrer" field name for GraphQL compatibility
+    referralAddress: userAddress,
     referrerAddress: referrerAddress,
     amount: amount,
   });
@@ -703,11 +703,10 @@ ponder.on("DepositPoolWBTC:ReferrerClaimed", async ({ event, context }: any) => 
   const referrerUserRecord = await getOrCreateUser(referrerAddress, rewardPoolIndex, depositPoolAddress, context);
   
   await context.db
-    .update(referrer)
+    .update(referrer, { userId: referrerUserRecord.id })
     .set({
       claimed: sql`${referrer.claimed} + ${amount}`,
-    })
-    .where(eq(referrer.userId, referrerUserRecord.id));
+    });
 });
 
 // =============================================================================
@@ -772,28 +771,26 @@ ponder.on("DepositPoolWETH:OwnershipTransferred", async ({ event, context }: any
 });
 
 ponder.on("DepositPoolWETH:UserStaked", async ({ event, context }: any) => {
-  const { rewardPoolIndex, user, amount } = event.args;
+  const { rewardPoolIndex, user: userAddress, amount } = event.args;
   const depositPoolAddress = event.log.address;
   
   const pool = await getOrCreateDepositPool(rewardPoolIndex, depositPoolAddress, context);
-  const userRecord = await getOrCreateUser(user, rewardPoolIndex, depositPoolAddress, context);
+  const userRecord = await getOrCreateUser(userAddress, rewardPoolIndex, depositPoolAddress, context);
   
   await context.db
-    .update(user)
+    .update(user, { id: userRecord.id })
     .set({
       staked: userRecord.staked + amount,
-    })
-    .where(eq(user.id, userRecord.id));
+    });
 
   await context.db
-    .update(depositPool)
+    .update(depositPool, { id: pool.id })
     .set({
       totalStaked: pool.totalStaked + amount,
-    })
-    .where(eq(depositPool.id, pool.id));
+    });
 
   // Get user's rate from contract (Phase 4.2 improvement)
-  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+  const userRate = await getUserRate(depositPoolAddress, userAddress, rewardPoolIndex, context);
 
   // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
@@ -814,28 +811,26 @@ ponder.on("DepositPoolWETH:UserStaked", async ({ event, context }: any) => {
 });
 
 ponder.on("DepositPoolWETH:UserWithdrawn", async ({ event, context }: any) => {
-  const { rewardPoolIndex, user, amount } = event.args;
+  const { rewardPoolIndex, user: userAddress, amount } = event.args;
   const depositPoolAddress = event.log.address;
   
   const pool = await getOrCreateDepositPool(rewardPoolIndex, depositPoolAddress, context);
-  const userRecord = await getOrCreateUser(user, rewardPoolIndex, depositPoolAddress, context);
+  const userRecord = await getOrCreateUser(userAddress, rewardPoolIndex, depositPoolAddress, context);
   
   await context.db
-    .update(user)
+    .update(user, { id: userRecord.id })
     .set({
       staked: userRecord.staked - amount,
-    })
-    .where(eq(user.id, userRecord.id));
+    });
 
   await context.db
-    .update(depositPool)
+    .update(depositPool, { id: pool.id })
     .set({
       totalStaked: pool.totalStaked - amount,
-    })
-    .where(eq(depositPool.id, pool.id));
+    });
 
   // Get user's rate from contract (Phase 4.2 improvement)
-  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+  const userRate = await getUserRate(depositPoolAddress, userAddress, rewardPoolIndex, context);
 
   // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
@@ -856,21 +851,20 @@ ponder.on("DepositPoolWETH:UserWithdrawn", async ({ event, context }: any) => {
 });
 
 ponder.on("DepositPoolWETH:UserClaimed", async ({ event, context }: any) => {
-  const { rewardPoolIndex, user, receiver, amount } = event.args;
+  const { rewardPoolIndex, user: userAddress, receiver, amount } = event.args;
   const depositPoolAddress = event.log.address;
   
   const pool = await getOrCreateDepositPool(rewardPoolIndex, depositPoolAddress, context);
-  const userRecord = await getOrCreateUser(user, rewardPoolIndex, depositPoolAddress, context);
+  const userRecord = await getOrCreateUser(userAddress, rewardPoolIndex, depositPoolAddress, context);
   
   await context.db
-    .update(user)
+    .update(user, { id: userRecord.id })
     .set({
       claimed: userRecord.claimed + amount,
-    })
-    .where(eq(user.id, userRecord.id));
+    });
 
   // Get user's rate from contract (Phase 4.2 improvement)
-  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+  const userRate = await getUserRate(depositPoolAddress, userAddress, rewardPoolIndex, context);
 
   // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
@@ -891,19 +885,21 @@ ponder.on("DepositPoolWETH:UserClaimed", async ({ event, context }: any) => {
 });
 
 ponder.on("DepositPoolWETH:UserReferred", async ({ event, context }: any) => {
-  const { rewardPoolIndex, user, referrer: referrerAddress, amount } = event.args;
+  const { rewardPoolIndex, user: userAddress, referrer: referrerAddress, amount } = event.args;
   const depositPoolAddress = event.log.address;
   
-  const referralUserRecord = await getOrCreateUser(user, rewardPoolIndex, depositPoolAddress, context);
+  const referralUserRecord = await getOrCreateUser(userAddress, rewardPoolIndex, depositPoolAddress, context);
   const referrerUserRecord = await getOrCreateUser(referrerAddress, rewardPoolIndex, depositPoolAddress, context);
   
-  let referrerRecord = await context.db
+  let referrerResults = await context.db
     .select()
     .from(referrer)
     .where(eq(referrer.userId, referrerUserRecord.id))
     .limit(1);
+    
+  let referrerRecord = referrerResults[0] || null;
 
-  if (referrerRecord.length === 0) {
+  if (!referrerRecord) {
     await context.db.insert(referrer).values({
       id: referrerUserRecord.id,
       userId: referrerUserRecord.id,
@@ -911,19 +907,20 @@ ponder.on("DepositPoolWETH:UserReferred", async ({ event, context }: any) => {
       claimed: 0n,
     });
     
-    referrerRecord = await context.db
+    const newReferrerResults = await context.db
       .select()
       .from(referrer)
       .where(eq(referrer.userId, referrerUserRecord.id))
       .limit(1);
+    referrerRecord = newReferrerResults[0];
   }
   
-  const referralId = createUserId(user, referrerAddress, rewardPoolIndex);
+  const referralId = createUserId(userAddress, referrerAddress, rewardPoolIndex);
   await context.db.insert(referral).values({
     id: referralId,
     referral: referralUserRecord.id, // FIXED: "referral" field name for GraphQL compatibility
-    referrer: referrerRecord[0].id, // FIXED: "referrer" field name for GraphQL compatibility
-    referralAddress: user,
+    referrer: referrerRecord.id, // FIXED: "referrer" field name for GraphQL compatibility
+    referralAddress: userAddress,
     referrerAddress: referrerAddress,
     amount: amount,
   });
@@ -936,11 +933,10 @@ ponder.on("DepositPoolWETH:ReferrerClaimed", async ({ event, context }: any) => 
   const referrerUserRecord = await getOrCreateUser(referrerAddress, rewardPoolIndex, depositPoolAddress, context);
   
   await context.db
-    .update(referrer)
+    .update(referrer, { userId: referrerUserRecord.id })
     .set({
       claimed: sql`${referrer.claimed} + ${amount}`,
-    })
-    .where(eq(referrer.userId, referrerUserRecord.id));
+    });
 });
 
 // TODO: Add event handlers for USDC, USDT pools following the same pattern// =============================================================================
@@ -1005,28 +1001,26 @@ ponder.on("DepositPoolUSDC:OwnershipTransferred", async ({ event, context }: any
 });
 
 ponder.on("DepositPoolUSDC:UserStaked", async ({ event, context }: any) => {
-  const { rewardPoolIndex, user, amount } = event.args;
+  const { rewardPoolIndex, user: userAddress, amount } = event.args;
   const depositPoolAddress = event.log.address;
   
   const pool = await getOrCreateDepositPool(rewardPoolIndex, depositPoolAddress, context);
-  const userRecord = await getOrCreateUser(user, rewardPoolIndex, depositPoolAddress, context);
+  const userRecord = await getOrCreateUser(userAddress, rewardPoolIndex, depositPoolAddress, context);
   
   await context.db
-    .update(user)
+    .update(user, { id: userRecord.id })
     .set({
       staked: userRecord.staked + amount,
-    })
-    .where(eq(user.id, userRecord.id));
+    });
 
   await context.db
-    .update(depositPool)
+    .update(depositPool, { id: pool.id })
     .set({
       totalStaked: pool.totalStaked + amount,
-    })
-    .where(eq(depositPool.id, pool.id));
+    });
 
   // Get user's rate from contract (Phase 4.2 improvement)
-  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+  const userRate = await getUserRate(depositPoolAddress, userAddress, rewardPoolIndex, context);
 
   // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
@@ -1047,28 +1041,26 @@ ponder.on("DepositPoolUSDC:UserStaked", async ({ event, context }: any) => {
 });
 
 ponder.on("DepositPoolUSDC:UserWithdrawn", async ({ event, context }: any) => {
-  const { rewardPoolIndex, user, amount } = event.args;
+  const { rewardPoolIndex, user: userAddress, amount } = event.args;
   const depositPoolAddress = event.log.address;
   
   const pool = await getOrCreateDepositPool(rewardPoolIndex, depositPoolAddress, context);
-  const userRecord = await getOrCreateUser(user, rewardPoolIndex, depositPoolAddress, context);
+  const userRecord = await getOrCreateUser(userAddress, rewardPoolIndex, depositPoolAddress, context);
   
   await context.db
-    .update(user)
+    .update(user, { id: userRecord.id })
     .set({
       staked: userRecord.staked - amount,
-    })
-    .where(eq(user.id, userRecord.id));
+    });
 
   await context.db
-    .update(depositPool)
+    .update(depositPool, { id: pool.id })
     .set({
       totalStaked: pool.totalStaked - amount,
-    })
-    .where(eq(depositPool.id, pool.id));
+    });
 
   // Get user's rate from contract (Phase 4.2 improvement)
-  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+  const userRate = await getUserRate(depositPoolAddress, userAddress, rewardPoolIndex, context);
 
   // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
@@ -1089,21 +1081,20 @@ ponder.on("DepositPoolUSDC:UserWithdrawn", async ({ event, context }: any) => {
 });
 
 ponder.on("DepositPoolUSDC:UserClaimed", async ({ event, context }: any) => {
-  const { rewardPoolIndex, user, receiver, amount } = event.args;
+  const { rewardPoolIndex, user: userAddress, receiver, amount } = event.args;
   const depositPoolAddress = event.log.address;
   
   const pool = await getOrCreateDepositPool(rewardPoolIndex, depositPoolAddress, context);
-  const userRecord = await getOrCreateUser(user, rewardPoolIndex, depositPoolAddress, context);
+  const userRecord = await getOrCreateUser(userAddress, rewardPoolIndex, depositPoolAddress, context);
   
   await context.db
-    .update(user)
+    .update(user, { id: userRecord.id })
     .set({
       claimed: userRecord.claimed + amount,
-    })
-    .where(eq(user.id, userRecord.id));
+    });
 
   // Get user's rate from contract (Phase 4.2 improvement)
-  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+  const userRate = await getUserRate(depositPoolAddress, userAddress, rewardPoolIndex, context);
 
   // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
@@ -1124,19 +1115,21 @@ ponder.on("DepositPoolUSDC:UserClaimed", async ({ event, context }: any) => {
 });
 
 ponder.on("DepositPoolUSDC:UserReferred", async ({ event, context }: any) => {
-  const { rewardPoolIndex, user, referrer: referrerAddress, amount } = event.args;
+  const { rewardPoolIndex, user: userAddress, referrer: referrerAddress, amount } = event.args;
   const depositPoolAddress = event.log.address;
   
-  const referralUserRecord = await getOrCreateUser(user, rewardPoolIndex, depositPoolAddress, context);
+  const referralUserRecord = await getOrCreateUser(userAddress, rewardPoolIndex, depositPoolAddress, context);
   const referrerUserRecord = await getOrCreateUser(referrerAddress, rewardPoolIndex, depositPoolAddress, context);
   
-  let referrerRecord = await context.db
+  let referrerResults = await context.db
     .select()
     .from(referrer)
     .where(eq(referrer.userId, referrerUserRecord.id))
     .limit(1);
+    
+  let referrerRecord = referrerResults[0] || null;
 
-  if (referrerRecord.length === 0) {
+  if (!referrerRecord) {
     await context.db.insert(referrer).values({
       id: referrerUserRecord.id,
       userId: referrerUserRecord.id,
@@ -1144,19 +1137,20 @@ ponder.on("DepositPoolUSDC:UserReferred", async ({ event, context }: any) => {
       claimed: 0n,
     });
     
-    referrerRecord = await context.db
+    const newReferrerResults = await context.db
       .select()
       .from(referrer)
       .where(eq(referrer.userId, referrerUserRecord.id))
       .limit(1);
+    referrerRecord = newReferrerResults[0];
   }
   
-  const referralId = createUserId(user, referrerAddress, rewardPoolIndex);
+  const referralId = createUserId(userAddress, referrerAddress, rewardPoolIndex);
   await context.db.insert(referral).values({
     id: referralId,
     referral: referralUserRecord.id, // FIXED: "referral" field name for GraphQL compatibility
-    referrer: referrerRecord[0].id, // FIXED: "referrer" field name for GraphQL compatibility
-    referralAddress: user,
+    referrer: referrerRecord.id, // FIXED: "referrer" field name for GraphQL compatibility
+    referralAddress: userAddress,
     referrerAddress: referrerAddress,
     amount: amount,
   });
@@ -1169,11 +1163,10 @@ ponder.on("DepositPoolUSDC:ReferrerClaimed", async ({ event, context }: any) => 
   const referrerUserRecord = await getOrCreateUser(referrerAddress, rewardPoolIndex, depositPoolAddress, context);
   
   await context.db
-    .update(referrer)
+    .update(referrer, { userId: referrerUserRecord.id })
     .set({
       claimed: sql`${referrer.claimed} + ${amount}`,
-    })
-    .where(eq(referrer.userId, referrerUserRecord.id));
+    });
 });
 
 // =============================================================================
@@ -1238,28 +1231,26 @@ ponder.on("DepositPoolUSDT:OwnershipTransferred", async ({ event, context }: any
 });
 
 ponder.on("DepositPoolUSDT:UserStaked", async ({ event, context }: any) => {
-  const { rewardPoolIndex, user, amount } = event.args;
+  const { rewardPoolIndex, user: userAddress, amount } = event.args;
   const depositPoolAddress = event.log.address;
   
   const pool = await getOrCreateDepositPool(rewardPoolIndex, depositPoolAddress, context);
-  const userRecord = await getOrCreateUser(user, rewardPoolIndex, depositPoolAddress, context);
+  const userRecord = await getOrCreateUser(userAddress, rewardPoolIndex, depositPoolAddress, context);
   
   await context.db
-    .update(user)
+    .update(user, { id: userRecord.id })
     .set({
       staked: userRecord.staked + amount,
-    })
-    .where(eq(user.id, userRecord.id));
+    });
 
   await context.db
-    .update(depositPool)
+    .update(depositPool, { id: pool.id })
     .set({
       totalStaked: pool.totalStaked + amount,
-    })
-    .where(eq(depositPool.id, pool.id));
+    });
 
   // Get user's rate from contract (Phase 4.2 improvement)
-  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+  const userRate = await getUserRate(depositPoolAddress, userAddress, rewardPoolIndex, context);
 
   // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
@@ -1280,28 +1271,26 @@ ponder.on("DepositPoolUSDT:UserStaked", async ({ event, context }: any) => {
 });
 
 ponder.on("DepositPoolUSDT:UserWithdrawn", async ({ event, context }: any) => {
-  const { rewardPoolIndex, user, amount } = event.args;
+  const { rewardPoolIndex, user: userAddress, amount } = event.args;
   const depositPoolAddress = event.log.address;
   
   const pool = await getOrCreateDepositPool(rewardPoolIndex, depositPoolAddress, context);
-  const userRecord = await getOrCreateUser(user, rewardPoolIndex, depositPoolAddress, context);
+  const userRecord = await getOrCreateUser(userAddress, rewardPoolIndex, depositPoolAddress, context);
   
   await context.db
-    .update(user)
+    .update(user, { id: userRecord.id })
     .set({
       staked: userRecord.staked - amount,
-    })
-    .where(eq(user.id, userRecord.id));
+    });
 
   await context.db
-    .update(depositPool)
+    .update(depositPool, { id: pool.id })
     .set({
       totalStaked: pool.totalStaked - amount,
-    })
-    .where(eq(depositPool.id, pool.id));
+    });
 
   // Get user's rate from contract (Phase 4.2 improvement)
-  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+  const userRate = await getUserRate(depositPoolAddress, userAddress, rewardPoolIndex, context);
 
   // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
@@ -1322,21 +1311,20 @@ ponder.on("DepositPoolUSDT:UserWithdrawn", async ({ event, context }: any) => {
 });
 
 ponder.on("DepositPoolUSDT:UserClaimed", async ({ event, context }: any) => {
-  const { rewardPoolIndex, user, receiver, amount } = event.args;
+  const { rewardPoolIndex, user: userAddress, receiver, amount } = event.args;
   const depositPoolAddress = event.log.address;
   
   const pool = await getOrCreateDepositPool(rewardPoolIndex, depositPoolAddress, context);
-  const userRecord = await getOrCreateUser(user, rewardPoolIndex, depositPoolAddress, context);
+  const userRecord = await getOrCreateUser(userAddress, rewardPoolIndex, depositPoolAddress, context);
   
   await context.db
-    .update(user)
+    .update(user, { id: userRecord.id })
     .set({
       claimed: userRecord.claimed + amount,
-    })
-    .where(eq(user.id, userRecord.id));
+    });
 
   // Get user's rate from contract (Phase 4.2 improvement)
-  const userRate = await getUserRate(depositPoolAddress, user, rewardPoolIndex, context);
+  const userRate = await getUserRate(depositPoolAddress, userAddress, rewardPoolIndex, context);
 
   // Get interaction counter and create pool interaction (original subgraph logic)
   const counter = await getOrIncrementInteractionCount(event.transaction.hash, context);
@@ -1357,19 +1345,21 @@ ponder.on("DepositPoolUSDT:UserClaimed", async ({ event, context }: any) => {
 });
 
 ponder.on("DepositPoolUSDT:UserReferred", async ({ event, context }: any) => {
-  const { rewardPoolIndex, user, referrer: referrerAddress, amount } = event.args;
+  const { rewardPoolIndex, user: userAddress, referrer: referrerAddress, amount } = event.args;
   const depositPoolAddress = event.log.address;
   
-  const referralUserRecord = await getOrCreateUser(user, rewardPoolIndex, depositPoolAddress, context);
+  const referralUserRecord = await getOrCreateUser(userAddress, rewardPoolIndex, depositPoolAddress, context);
   const referrerUserRecord = await getOrCreateUser(referrerAddress, rewardPoolIndex, depositPoolAddress, context);
   
-  let referrerRecord = await context.db
+  let referrerResults = await context.db
     .select()
     .from(referrer)
     .where(eq(referrer.userId, referrerUserRecord.id))
     .limit(1);
+    
+  let referrerRecord = referrerResults[0] || null;
 
-  if (referrerRecord.length === 0) {
+  if (!referrerRecord) {
     await context.db.insert(referrer).values({
       id: referrerUserRecord.id,
       userId: referrerUserRecord.id,
@@ -1377,19 +1367,20 @@ ponder.on("DepositPoolUSDT:UserReferred", async ({ event, context }: any) => {
       claimed: 0n,
     });
     
-    referrerRecord = await context.db
+    const newReferrerResults = await context.db
       .select()
       .from(referrer)
       .where(eq(referrer.userId, referrerUserRecord.id))
       .limit(1);
+    referrerRecord = newReferrerResults[0];
   }
   
-  const referralId = createUserId(user, referrerAddress, rewardPoolIndex);
+  const referralId = createUserId(userAddress, referrerAddress, rewardPoolIndex);
   await context.db.insert(referral).values({
     id: referralId,
     referral: referralUserRecord.id, // FIXED: "referral" field name for GraphQL compatibility
-    referrer: referrerRecord[0].id, // FIXED: "referrer" field name for GraphQL compatibility
-    referralAddress: user,
+    referrer: referrerRecord.id, // FIXED: "referrer" field name for GraphQL compatibility
+    referralAddress: userAddress,
     referrerAddress: referrerAddress,
     amount: amount,
   });
@@ -1402,9 +1393,8 @@ ponder.on("DepositPoolUSDT:ReferrerClaimed", async ({ event, context }: any) => 
   const referrerUserRecord = await getOrCreateUser(referrerAddress, rewardPoolIndex, depositPoolAddress, context);
   
   await context.db
-    .update(referrer)
+    .update(referrer, { userId: referrerUserRecord.id })
     .set({
       claimed: sql`${referrer.claimed} + ${amount}`,
-    })
-    .where(eq(referrer.userId, referrerUserRecord.id));
+    });
 });
