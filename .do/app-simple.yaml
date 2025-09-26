@@ -32,12 +32,12 @@ services:
   environment_slug: node-js
   instance_count: 1
   instance_size_slug: basic-xxs  # 0.5 vCPU, 0.5 GB RAM
-  http_port: 3000
+  http_port: 42069
   routes:
   - path: /
     preserve_path_prefix: true
   health_check:
-    http_path: /health
+    http_path: /ready
     initial_delay_seconds: 60
     period_seconds: 15
     timeout_seconds: 15
@@ -52,12 +52,17 @@ services:
     value: ponder_capital_latest
   - key: PONDER_LOG_LEVEL
     value: info
+  - key: PONDER_PORT
+    value: 42069
   - key: PONDER_RPC_URL_1
-    value: "https://api.noderpc.xyz/rpc-mainnet/_M2px5r8-_azU1pKiJUscsbtCPEgnfkl7HBu1egQRvM"
+    scope: RUN_AND_BUILD_TIME
     type: SECRET
   - key: PONDER_RPC_URL_42161
-    value: "https://arb-mainnet.g.alchemy.com/v2/8hD3GpBjP6k2a5rdlPNSy"
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+  - key: PONDER_RPC_URL_8453
+    scope: RUN_AND_BUILD_TIME
     type: SECRET
   - key: DATABASE_URL
-    value: "postgresql://doadmin:AVNS_OmHrlDNzrnJ8UB7F_wk@morpheusai-ponder-postgres-do-user-18955987-0.l.db.ondigitalocean.com:25060/ponder_production?sslmode=require"
+    scope: RUN_AND_BUILD_TIME
     type: SECRET
