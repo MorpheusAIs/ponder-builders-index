@@ -23,9 +23,9 @@ export default createConfig({
       abi: BuildersAbi,
       chain: "baseSepolia",
       // TODO: Update with actual contract address from https://gitbook.mor.org/smart-contracts/documentation/builders-protocol/deployed-contracts
-      address: process.env.BUILDERS_V4_CONTRACT_ADDRESS || "0x0000000000000000000000000000000000000000",
+      address: (process.env.BUILDERS_V4_CONTRACT_ADDRESS || "0x6C3401D71CEd4b4fEFD1033EA5F83e9B3E7e4381") as `0x${string}`,
       // TODO: Update with actual deployment block number
-      startBlock: Number(process.env.BUILDERS_V4_START_BLOCK || "0"),
+      startBlock: Number(process.env.BUILDERS_V4_START_BLOCK || "29016947"),
       includeTransactionReceipts: true,
     },
 
@@ -34,9 +34,9 @@ export default createConfig({
       abi: ERC20Abi,
       chain: "baseSepolia",
       // TODO: Update with actual MOR token address on Base Sepolia
-      address: process.env.MOR_TOKEN_ADDRESS_BASE_SEPOLIA || "0x0000000000000000000000000000000000000000",
+      address: (process.env.MOR_TOKEN_ADDRESS_BASE_SEPOLIA || "0x5C80Ddd187054E1E4aBBfFCD750498e81d34FfA3") as `0x${string}`,
       // TODO: Update with actual deployment block number
-      startBlock: Number(process.env.MOR_TOKEN_START_BLOCK_BASE_SEPOLIA || "0"),
+      startBlock: Number(process.env.MOR_TOKEN_START_BLOCK_BASE_SEPOLIA || "24869176"),
     },
   },
 });

@@ -21,7 +21,7 @@ export const buildersProject = onchainTable("builders_project", (t) => ({
 // Builders users table - matches GraphQL BuildersUser entity
 export const buildersUser = onchainTable("builders_user", (t) => ({
   id: t.text().primaryKey(), // Composite: `${projectId}-${address}`
-  buildersProjectId: t.hex().notNull().references(() => buildersProject.id),
+  buildersProjectId: t.hex().notNull(), // Foreign key reference handled via relations
   address: t.hex().notNull(), // User address
   staked: t.bigint().notNull().default(0n), // Current staked amount
   claimed: t.bigint().notNull().default(0n), // Total claimed amount
@@ -35,7 +35,7 @@ export const buildersUser = onchainTable("builders_user", (t) => ({
 // Transaction events for detailed history
 export const stakingEvent = onchainTable("staking_event", (t) => ({
   id: t.text().primaryKey(), // `${txHash}-${logIndex}`
-  buildersProjectId: t.hex().notNull().references(() => buildersProject.id),
+  buildersProjectId: t.hex().notNull(), // Foreign key reference handled via relations
   userAddress: t.hex().notNull(),
   eventType: t.text().notNull(), // 'DEPOSIT', 'WITHDRAW', 'CLAIM'
   amount: t.bigint().notNull(),
