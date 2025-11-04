@@ -74,6 +74,19 @@ export const dynamicSubnet = onchainTable("dynamic_subnet", (t) => ({
   chainId: t.integer().notNull(),
 }));
 
+// Reward distributions from BuildersTreasuryV2
+export const rewardDistribution = onchainTable("reward_distribution", (t) => ({
+  id: t.text().primaryKey(), // `${txHash}-${logIndex}`
+  receiver: t.hex().notNull(), // Address receiving the reward
+  amount: t.bigint().notNull(), // Reward amount distributed
+  blockNumber: t.bigint().notNull(),
+  blockTimestamp: t.integer().notNull(),
+  transactionHash: t.hex().notNull(),
+  logIndex: t.integer().notNull(),
+  chainId: t.integer().notNull(),
+  treasuryAddress: t.hex().notNull(), // BuildersTreasuryV2 contract address
+}));
+
 // Global counters - matches GraphQL counters entity
 export const counters = onchainTable("counters", (t) => ({
   id: t.text().primaryKey().default("global"), // Single row

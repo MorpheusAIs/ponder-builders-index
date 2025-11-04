@@ -5,6 +5,7 @@ import {
   stakingEvent, 
   morTransfer, 
   dynamicSubnet, 
+  rewardDistribution,
   counters 
 } from "ponder:schema";
 import { isAddressEqual } from "viem";
@@ -302,5 +303,22 @@ ponder.on("MorToken:Transfer", async ({ event, context }: any) => {
     isStakingDeposit,
     isStakingWithdraw,
     relatedProjectId,
+  });
+});
+
+// BuildersTreasuryV2 Reward Distribution Events
+ponder.on("BuildersTreasuryV2:RewardSent", async ({ event, context }: any) => {
+  const { receiver, amount } = event.args;
+  
+  await context.db.insert(rewardDistribution).values({
+    id: `${event.transaction.hash}-${event.log.logIndex}`,
+    receiver: receiver,
+    amount: amount,
+    blockNumber: event.block.number,
+    blockTimestamp: Number(context.block.timestamp),
+    transactionHash: event.transaction.hash,
+    logIndex: event.log.logIndex,
+    chainId: context.chain.id,
+    treasuryAddress: event.log.address,
   });
 });
