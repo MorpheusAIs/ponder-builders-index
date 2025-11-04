@@ -192,3 +192,4 @@ ponder_database_locks:
     - lock_count:
         usage: "GAUGE"
         description: "Number of locks held"
+

@@ -112,3 +112,4 @@ inhibit_rules:
 
 # Mute specific alerts during maintenance windows
 # You can add time-based silences here or via the Alertmanager UI
+
