@@ -98,6 +98,8 @@ export const counters = onchainTable("counters", (t) => ({
 }));
 
 // Define relationships between tables
+// Note: Ponder doesn't support foreign key constraints at the database level
+// Relations are defined for GraphQL API purposes only
 export const buildersProjectRelations = relations(buildersProject, ({ many }) => ({
   users: many(buildersUser),
   events: many(stakingEvent),
@@ -106,20 +108,17 @@ export const buildersProjectRelations = relations(buildersProject, ({ many }) =>
 export const buildersUserRelations = relations(buildersUser, ({ one }) => ({
   project: one(buildersProject, {
     fields: [buildersUser.buildersProjectId],
-    references: [buildersProject.id],
   }),
 }));
 
 export const stakingEventRelations = relations(stakingEvent, ({ one }) => ({
   project: one(buildersProject, {
     fields: [stakingEvent.buildersProjectId],
-    references: [buildersProject.id],
   }),
 }));
 
 export const morTransferRelations = relations(morTransfer, ({ one }) => ({
   relatedProject: one(buildersProject, {
     fields: [morTransfer.relatedProjectId],
-    references: [buildersProject.id],
   }),
 }));
