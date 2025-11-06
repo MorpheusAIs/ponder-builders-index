@@ -70,3 +70,6 @@ ENTRYPOINT ["dumb-init", "--"]
 
 # Start the application
 CMD ["pnpm", "start"]
+
+
+
