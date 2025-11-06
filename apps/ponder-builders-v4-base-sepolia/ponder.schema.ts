@@ -16,6 +16,11 @@ export const buildersProject = onchainTable("builders_project", (t) => ({
   contractAddress: t.hex().notNull(), // Builders contract address
   createdAt: t.integer().notNull(), // Block timestamp when created
   createdAtBlock: t.bigint().notNull(), // Block number when created
+  // Metadata fields
+  slug: t.text(), // Subnet slug/identifier
+  description: t.text(), // Subnet description
+  website: t.text(), // Subnet website URL
+  image: t.text(), // Subnet image URL
 }));
 
 // Builders users table - matches GraphQL BuildersUser entity
@@ -108,17 +113,20 @@ export const buildersProjectRelations = relations(buildersProject, ({ many }) =>
 export const buildersUserRelations = relations(buildersUser, ({ one }) => ({
   project: one(buildersProject, {
     fields: [buildersUser.buildersProjectId],
+    references: [buildersProject.id],
   }),
 }));
 
 export const stakingEventRelations = relations(stakingEvent, ({ one }) => ({
   project: one(buildersProject, {
     fields: [stakingEvent.buildersProjectId],
+    references: [buildersProject.id],
   }),
 }));
 
 export const morTransferRelations = relations(morTransfer, ({ one }) => ({
   relatedProject: one(buildersProject, {
     fields: [morTransfer.relatedProjectId],
+    references: [buildersProject.id],
   }),
 }));

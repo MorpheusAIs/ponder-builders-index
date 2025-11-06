@@ -9,106 +9,120 @@ import {
   counters 
 } from "ponder:schema";
 import { isAddressEqual } from "viem";
-import { eq, sql } from "ponder";
 
 // Helper function to create composite user ID
 const createUserId = (projectId: string, userAddress: string) => 
   `${projectId}-${userAddress.toLowerCase()}`;
 
 // Helper function to get or create counters
-const getOrCreateCounters = async (context: any) => {
-  let counter = await context.db
-    .select()
-    .from(counters)
-    .where(eq(counters.id, "global"))
-    .limit(1);
+const getOrCreateCounters = async (context: any, timestamp: number) => {
+  let counter = await context.db.find(counters, { id: "global" });
 
-  if (counter.length === 0) {
+  if (!counter) {
     await context.db.insert(counters).values({
       id: "global",
       totalBuildersProjects: 0,
       totalSubnets: 0,
       totalStaked: 0n,
       totalUsers: 0,
-      lastUpdated: Number(context.block.timestamp),
+      lastUpdated: timestamp,
     });
     
-    counter = await context.db
-      .select()
-      .from(counters)
-      .where(eq(counters.id, "global"))
-      .limit(1);
+    counter = await context.db.find(counters, { id: "global" });
   }
 
-  return counter[0];
+  return counter;
 };
 
 // Builders Contract Events
 
-ponder.on("BuildersV4:BuilderPoolCreated", async ({ event, context }: any) => {
-  const { poolId, name, admin } = event.args;
+ponder.on("BuildersV4:SubnetCreated", async ({ event, context }: any) => {
+  const { subnetId, subnet } = event.args;
   
-  // Read additional pool parameters from contract
-  const [poolInfo, currentReward] = await Promise.all([
-    context.client.readContract({
-      address: event.log.address,
-      abi: context.contracts.BuildersV4.abi,
-      functionName: "usersData",
-      args: [admin, poolId], // Get admin's data to understand pool structure
-    }),
-    context.client.readContract({
-      address: event.log.address,
-      abi: context.contracts.BuildersV4.abi,
-      functionName: "getCurrentBuilderReward",
-      args: [poolId],
-    }),
-  ]);
+  // subnet is a tuple with: name, admin, unusedStorage1_V4Update, withdrawLockPeriodAfterDeposit, unusedStorage2_V4Update, minimalDeposit, claimAdmin
+  const { name, admin, withdrawLockPeriodAfterDeposit, minimalDeposit } = subnet;
 
-  // Create the builders project
-  await context.db.insert(buildersProject).values({
-    id: poolId,
-    name: name,
-    admin: admin,
-    totalStaked: 0n,
-    totalUsers: 0,
-    totalClaimed: 0n,
-    // Note: These would need to be derived from pool creation parameters
-    // For now using placeholder values - in practice, these should come from the createBuilderPool call data
-    minimalDeposit: 1000000000000000000n, // 1 MOR placeholder
-    withdrawLockPeriodAfterDeposit: 86400n * 30n, // 30 days placeholder
-    claimLockEnd: BigInt(context.block.timestamp) + 86400n * 365n, // 1 year placeholder
-    startsAt: BigInt(context.block.timestamp),
-    chainId: context.chain.id,
-    contractAddress: event.log.address,
-    createdAt: Number(context.block.timestamp),
-    createdAtBlock: event.block.number,
+  // Check if project already exists (can happen if SubnetMetadataEdited was processed first)
+  let existingProject = await context.db.find(buildersProject, { id: subnetId });
+
+  // Read metadata from contract (metadata is set during creation but not emitted in event)
+  const metadata = await context.client.readContract({
+    address: event.log.address,
+    abi: context.contracts.BuildersV4.abi,
+    functionName: "subnetsMetadata",
+    args: [subnetId],
   });
 
-  // Update counters
-  const counter = await getOrCreateCounters(context);
-  await context.db
-    .update(counters)
-    .set({
-      totalBuildersProjects: counter.totalBuildersProjects + 1,
-      lastUpdated: Number(context.block.timestamp),
-    })
-    .where(eq(counters.id, "global"));
+  const [slug, description, website, image] = metadata;
+
+  const blockTimestamp = Number(event.block.timestamp);
+
+  if (!existingProject) {
+    // Create the builders project (subnet)
+    await context.db.insert(buildersProject).values({
+      id: subnetId,
+      name: name,
+      admin: admin,
+      totalStaked: 0n,
+      totalUsers: 0,
+      totalClaimed: 0n,
+      minimalDeposit: minimalDeposit,
+      withdrawLockPeriodAfterDeposit: withdrawLockPeriodAfterDeposit,
+      claimLockEnd: BigInt(blockTimestamp) + BigInt(withdrawLockPeriodAfterDeposit),
+      startsAt: BigInt(blockTimestamp),
+      chainId: context.chain.id,
+      contractAddress: event.log.address,
+      createdAt: blockTimestamp,
+      createdAtBlock: event.block.number,
+      slug: slug || null,
+      description: description || null,
+      website: website || null,
+      image: image || null,
+    });
+
+    // Update counters
+    const counter = await getOrCreateCounters(context, blockTimestamp);
+    await context.db
+      .update(counters, { id: "global" })
+      .set({
+        totalBuildersProjects: counter.totalBuildersProjects + 1,
+        totalSubnets: counter.totalSubnets + 1,
+        lastUpdated: blockTimestamp,
+      });
+  } else {
+    // Project already exists (created by SubnetMetadataEdited), update it with subnet data
+    await context.db
+      .update(buildersProject, { id: subnetId })
+      .set({
+        name: name,
+        admin: admin,
+        minimalDeposit: minimalDeposit,
+        withdrawLockPeriodAfterDeposit: withdrawLockPeriodAfterDeposit,
+        claimLockEnd: BigInt(blockTimestamp) + BigInt(withdrawLockPeriodAfterDeposit),
+        startsAt: BigInt(blockTimestamp),
+        slug: slug || existingProject.slug,
+        description: description || existingProject.description,
+        website: website || existingProject.website,
+        image: image || existingProject.image,
+      });
+  }
 });
 
-ponder.on("BuildersV4:Deposited", async ({ event, context }: any) => {
-  const { user, builderPoolId, amount } = event.args;
+ponder.on("BuildersV4:UserDeposited", async ({ event, context }: any) => {
+  const { subnetId, user, amount } = event.args;
   
-  const userId = createUserId(builderPoolId, user);
+  const userId = createUserId(subnetId, user);
   
   // Create staking event record
+  const blockTimestamp = Number(event.block.timestamp);
   await context.db.insert(stakingEvent).values({
     id: `${event.transaction.hash}-${event.log.logIndex}`,
-    buildersProjectId: builderPoolId,
+    buildersProjectId: subnetId,
     userAddress: user,
     eventType: "DEPOSIT",
     amount: amount,
     blockNumber: event.block.number,
-    blockTimestamp: Number(context.block.timestamp),
+    blockTimestamp: blockTimestamp,
     transactionHash: event.transaction.hash,
     logIndex: event.log.logIndex,
     chainId: context.chain.id,
@@ -119,68 +133,75 @@ ponder.on("BuildersV4:Deposited", async ({ event, context }: any) => {
     address: event.log.address,
     abi: context.contracts.BuildersV4.abi,
     functionName: "usersData",
-    args: [user, builderPoolId],
+    args: [user, subnetId],
   });
 
-  const [lastDeposit, claimLockStart, deposited, virtualDeposited] = userData;
+  const [lastDeposit, unusedStorage1_V4Update, deposited, unusedStorage2_V4Update] = userData;
+
+  // Check if user already exists
+  const existingUser = await context.db.find(buildersUser, { id: userId });
+  
+  // Get current project totals
+  const project = await context.db.find(buildersProject, { id: subnetId });
+  if (!project) {
+    throw new Error(`Project ${subnetId} not found`);
+  }
+
+  // Calculate incremental changes
+  const oldStaked = existingUser?.staked || 0n;
+  const stakedDelta = deposited - oldStaked;
+  const isNewUser = !existingUser;
 
   // Upsert user record
   await context.db
     .insert(buildersUser)
     .values({
       id: userId,
-      buildersProjectId: builderPoolId,
+      buildersProjectId: subnetId,
       address: user,
       staked: deposited,
-      claimed: 0n, // Will be updated on claim events
-      lastStake: BigInt(context.block.timestamp),
-      claimLockEnd: claimLockStart,
+      claimed: existingUser?.claimed || 0n,
+      lastStake: BigInt(blockTimestamp),
+      claimLockEnd: BigInt(lastDeposit),
       lastDeposit: lastDeposit,
-      virtualDeposited: virtualDeposited,
+      virtualDeposited: unusedStorage2_V4Update,
       chainId: context.chain.id,
     })
     .onConflictDoUpdate({
-      staked: deposited,
-      lastStake: BigInt(context.block.timestamp),
-      claimLockEnd: claimLockStart,
-      lastDeposit: lastDeposit,
-      virtualDeposited: virtualDeposited,
+      target: [buildersUser.id],
+      set: {
+        staked: deposited,
+        lastStake: BigInt(blockTimestamp),
+        claimLockEnd: BigInt(lastDeposit),
+        lastDeposit: lastDeposit,
+        virtualDeposited: unusedStorage2_V4Update,
+      },
     });
 
-  // Update project totals
-  const existingUsers = await context.db
-    .select({ count: sql`count(*)` })
-    .from(buildersUser)
-    .where(eq(buildersUser.buildersProjectId, builderPoolId));
-
-  const totalStaked = await context.db
-    .select({ sum: sql`sum(${buildersUser.staked})` })
-    .from(buildersUser)
-    .where(eq(buildersUser.buildersProjectId, builderPoolId));
-
+  // Update project totals incrementally
   await context.db
-    .update(buildersProject)
+    .update(buildersProject, { id: subnetId })
     .set({
-      totalStaked: totalStaked[0].sum || 0n,
-      totalUsers: existingUsers[0].count,
-    })
-    .where(eq(buildersProject.id, builderPoolId));
+      totalStaked: project.totalStaked + stakedDelta,
+      totalUsers: isNewUser ? project.totalUsers + 1 : project.totalUsers,
+    });
 });
 
-ponder.on("BuildersV4:Withdrawn", async ({ event, context }: any) => {
-  const { user, builderPoolId, amount } = event.args;
+ponder.on("BuildersV4:UserWithdrawn", async ({ event, context }: any) => {
+  const { subnetId, user, amount } = event.args;
   
-  const userId = createUserId(builderPoolId, user);
+  const userId = createUserId(subnetId, user);
   
   // Create staking event record
+  const blockTimestamp = Number(event.block.timestamp);
   await context.db.insert(stakingEvent).values({
     id: `${event.transaction.hash}-${event.log.logIndex}`,
-    buildersProjectId: builderPoolId,
+    buildersProjectId: subnetId,
     userAddress: user,
     eventType: "WITHDRAW",
     amount: amount,
     blockNumber: event.block.number,
-    blockTimestamp: Number(context.block.timestamp),
+    blockTimestamp: blockTimestamp,
     transactionHash: event.transaction.hash,
     logIndex: event.log.logIndex,
     chainId: context.chain.id,
@@ -191,83 +212,111 @@ ponder.on("BuildersV4:Withdrawn", async ({ event, context }: any) => {
     address: event.log.address,
     abi: context.contracts.BuildersV4.abi,
     functionName: "usersData",
-    args: [user, builderPoolId],
+    args: [user, subnetId],
   });
 
-  const [lastDeposit, claimLockStart, deposited, virtualDeposited] = userData;
+  const [lastDeposit, unusedStorage1_V4Update, deposited, unusedStorage2_V4Update] = userData;
+
+  // Get current user and project records
+  const existingUser = await context.db.find(buildersUser, { id: userId });
+  const project = await context.db.find(buildersProject, { id: subnetId });
+  
+  if (!existingUser || !project) {
+    throw new Error(`User ${userId} or project ${subnetId} not found`);
+  }
+
+  // Calculate incremental change
+  const oldStaked = existingUser.staked;
+  const stakedDelta = deposited - oldStaked;
 
   // Update user record
   await context.db
-    .update(buildersUser)
+    .update(buildersUser, { id: userId })
     .set({
       staked: deposited,
       lastDeposit: lastDeposit,
-      virtualDeposited: virtualDeposited,
-    })
-    .where(eq(buildersUser.id, userId));
+      virtualDeposited: unusedStorage2_V4Update,
+    });
 
-  // Update project totals
-  const totalStaked = await context.db
-    .select({ sum: sql`sum(${buildersUser.staked})` })
-    .from(buildersUser)
-    .where(eq(buildersUser.buildersProjectId, builderPoolId));
-
+  // Update project totals incrementally
   await context.db
-    .update(buildersProject)
+    .update(buildersProject, { id: subnetId })
     .set({
-      totalStaked: totalStaked[0].sum || 0n,
-    })
-    .where(eq(buildersProject.id, builderPoolId));
+      totalStaked: project.totalStaked + stakedDelta,
+    });
 });
 
-ponder.on("BuildersV4:Claimed", async ({ event, context }: any) => {
-  const { user, builderPoolId, amount } = event.args;
+// Subnet Metadata Updates
+ponder.on("BuildersV4:SubnetMetadataEdited", async ({ event, context }: any) => {
+  const { subnetId_, metadata_ } = event.args;
   
-  const userId = createUserId(builderPoolId, user);
-  
-  // Create staking event record
-  await context.db.insert(stakingEvent).values({
-    id: `${event.transaction.hash}-${event.log.logIndex}`,
-    buildersProjectId: builderPoolId,
-    userAddress: user,
-    eventType: "CLAIM",
-    amount: amount,
-    blockNumber: event.block.number,
-    blockTimestamp: Number(context.block.timestamp),
-    transactionHash: event.transaction.hash,
-    logIndex: event.log.logIndex,
-    chainId: context.chain.id,
-  });
+  const { slug, description, website, image } = metadata_;
 
-  // Update user claimed amount
-  const existingUser = await context.db
-    .select()
-    .from(buildersUser)
-    .where(eq(buildersUser.id, userId))
-    .limit(1);
+  // Check if project exists
+  let project = await context.db.find(buildersProject, { id: subnetId_ });
 
-  if (existingUser.length > 0) {
+  // If project doesn't exist, create it by reading from contract
+  // This can happen if metadata is edited in the same transaction as creation
+  if (!project) {
+    const blockTimestamp = Number(event.block.timestamp);
+    
+    // Read subnet data from contract
+    const subnetData = await context.client.readContract({
+      address: event.log.address,
+      abi: context.contracts.BuildersV4.abi,
+      functionName: "subnets",
+      args: [subnetId_],
+    });
+
+    const [name, admin, unusedStorage1_V4Update, withdrawLockPeriodAfterDeposit, unusedStorage2_V4Update, minimalDeposit, claimAdmin] = subnetData;
+
+    // Create the project
+    await context.db.insert(buildersProject).values({
+      id: subnetId_,
+      name: name,
+      admin: admin,
+      totalStaked: 0n,
+      totalUsers: 0,
+      totalClaimed: 0n,
+      minimalDeposit: minimalDeposit,
+      withdrawLockPeriodAfterDeposit: withdrawLockPeriodAfterDeposit,
+      claimLockEnd: BigInt(blockTimestamp) + BigInt(withdrawLockPeriodAfterDeposit),
+      startsAt: BigInt(blockTimestamp),
+      chainId: context.chain.id,
+      contractAddress: event.log.address,
+      createdAt: blockTimestamp,
+      createdAtBlock: event.block.number,
+      slug: slug || null,
+      description: description || null,
+      website: website || null,
+      image: image || null,
+    });
+
+    // Update counters
+    const counter = await getOrCreateCounters(context, blockTimestamp);
     await context.db
-      .update(buildersUser)
+      .update(counters, { id: "global" })
       .set({
-        claimed: existingUser[0].claimed + amount,
-      })
-      .where(eq(buildersUser.id, userId));
+        totalBuildersProjects: counter.totalBuildersProjects + 1,
+        totalSubnets: counter.totalSubnets + 1,
+        lastUpdated: blockTimestamp,
+      });
+  } else {
+    // Update project metadata
+    await context.db
+      .update(buildersProject, { id: subnetId_ })
+      .set({
+        slug: slug || null,
+        description: description || null,
+        website: website || null,
+        image: image || null,
+      });
   }
-
-  // Update project total claimed
-  const totalClaimed = await context.db
-    .select({ sum: sql`sum(${buildersUser.claimed})` })
-    .from(buildersUser)
-    .where(eq(buildersUser.buildersProjectId, builderPoolId));
-
-  await context.db
-    .update(buildersProject)
-    .set({
-      totalClaimed: totalClaimed[0].sum || 0n,
-    })
-    .where(eq(buildersProject.id, builderPoolId));
 });
+
+// Note: BuildersV4 doesn't have a Claimed event for users
+// Claims are handled through the BuildersTreasuryV2 contract
+// AdminClaimed event exists but is for admin rewards, not user rewards
 
 // MOR Token Transfer Events
 ponder.on("MorToken:Transfer", async ({ event, context }: any) => {
@@ -296,7 +345,7 @@ ponder.on("MorToken:Transfer", async ({ event, context }: any) => {
     to: to,
     value: value,
     blockNumber: event.block.number,
-    blockTimestamp: Number(context.block.timestamp),
+    blockTimestamp: Number(event.block.timestamp),
     transactionHash: event.transaction.hash,
     logIndex: event.log.logIndex,
     chainId: context.chain.id,
@@ -315,7 +364,7 @@ ponder.on("BuildersTreasuryV2:RewardSent", async ({ event, context }: any) => {
     receiver: receiver,
     amount: amount,
     blockNumber: event.block.number,
-    blockTimestamp: Number(context.block.timestamp),
+    blockTimestamp: Number(event.block.timestamp),
     transactionHash: event.transaction.hash,
     logIndex: event.log.logIndex,
     chainId: context.chain.id,
