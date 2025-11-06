@@ -78,5 +78,9 @@ WORKDIR /app/apps/ponder-capital
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]
 
-# Start the application
-CMD ["pnpm", "start"]
+# Start the application with schema support for zero-downtime deployments
+# If DATABASE_SCHEMA is set, use it; otherwise use default
+CMD ["sh", "-c", "if [ -n \"$DATABASE_SCHEMA\" ]; then pnpm start --schema $DATABASE_SCHEMA; else pnpm start; fi"]
+
+
+
