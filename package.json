@@ -17,6 +17,7 @@
     "db:setup": "docker-compose -f infrastructure/docker-compose.yml up -d",
     "db:down": "docker-compose -f infrastructure/docker-compose.yml down",
     "builders:dev": "npm run dev --workspace=apps/ponder-builders",
+    "builders-v4:dev": "npm run dev --workspace=apps/ponder-builders-v4-base-sepolia",
     "capital:dev": "npm run dev --workspace=apps/ponder-capital",
     "subnets:dev": "npm run dev --workspace=apps/ponder-subnets",
     "federation:dev": "npm run dev --workspace=gateway/apollo-federation"

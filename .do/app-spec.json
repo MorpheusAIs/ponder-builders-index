@@ -1,0 +1,251 @@
+{
+  "name": "ponder-builders-index-monorepo",
+  "region": "nyc1",
+  "databases": [
+    {
+      "name": "ponder-db",
+      "engine": "PG",
+      "version": "15",
+      "production": false,
+      "size": "db-s-dev-database"
+    }
+  ],
+  "services": [
+    {
+      "name": "ponder-capital",
+      "github": {
+        "repo": "MorpheusAIs/ponder-builders-index",
+        "branch": "main",
+        "deploy_on_push": true
+      },
+      "dockerfile_path": "apps/ponder-capital/Dockerfile.production",
+      "source_dir": ".",
+      "instance_count": 1,
+      "instance_size_slug": "basic-xxs",
+      "http_port": 42069,
+      "health_check": {
+        "http_path": "/health",
+        "initial_delay_seconds": 120,
+        "period_seconds": 30,
+        "timeout_seconds": 15,
+        "success_threshold": 1,
+        "failure_threshold": 3
+      },
+      "envs": [
+        {
+          "key": "DATABASE_URL",
+          "scope": "RUN_TIME",
+          "type": "SECRET",
+          "value": "${ponder-db.DATABASE_URL}"
+        },
+        {
+          "key": "DATABASE_SCHEMA",
+          "value": "ponder_capital_prod"
+        },
+        {
+          "key": "PONDER_RPC_URL_1",
+          "scope": "RUN_TIME",
+          "type": "SECRET",
+          "value": "${PONDER_RPC_URL_1}"
+        },
+        {
+          "key": "PONDER_RPC_URL_42161",
+          "scope": "RUN_TIME",
+          "type": "SECRET",
+          "value": "${PONDER_RPC_URL_42161}"
+        },
+        {
+          "key": "NODE_ENV",
+          "value": "production"
+        },
+        {
+          "key": "PONDER_LOG_LEVEL",
+          "value": "info"
+        },
+        {
+          "key": "PORT",
+          "value": "42069"
+        }
+      ],
+      "routes": [
+        {
+          "path": "/capital"
+        }
+      ],
+      "cors": {
+        "allow_origins": [
+          {
+            "prefix": "*"
+          }
+        ],
+        "allow_methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+      }
+    },
+    {
+      "name": "ponder-builders",
+      "github": {
+        "repo": "MorpheusAIs/ponder-builders-index",
+        "branch": "main",
+        "deploy_on_push": true
+      },
+      "dockerfile_path": "apps/ponder-builders/Dockerfile.production",
+      "source_dir": ".",
+      "instance_count": 1,
+      "instance_size_slug": "basic-xxs",
+      "http_port": 42069,
+      "health_check": {
+        "http_path": "/health",
+        "initial_delay_seconds": 120,
+        "period_seconds": 30,
+        "timeout_seconds": 15,
+        "success_threshold": 1,
+        "failure_threshold": 3
+      },
+      "envs": [
+        {
+          "key": "DATABASE_URL",
+          "scope": "RUN_TIME",
+          "type": "SECRET",
+          "value": "${ponder-db.DATABASE_URL}"
+        },
+        {
+          "key": "DATABASE_SCHEMA",
+          "value": "ponder_builders_prod"
+        },
+        {
+          "key": "PONDER_RPC_URL_42161",
+          "scope": "RUN_TIME",
+          "type": "SECRET",
+          "value": "${PONDER_RPC_URL_42161}"
+        },
+        {
+          "key": "PONDER_RPC_URL_8453",
+          "scope": "RUN_TIME",
+          "type": "SECRET",
+          "value": "${PONDER_RPC_URL_8453}"
+        },
+        {
+          "key": "NODE_ENV",
+          "value": "production"
+        },
+        {
+          "key": "PONDER_LOG_LEVEL",
+          "value": "info"
+        },
+        {
+          "key": "PORT",
+          "value": "42069"
+        }
+      ],
+      "routes": [
+        {
+          "path": "/builders"
+        }
+      ],
+      "cors": {
+        "allow_origins": [
+          {
+            "prefix": "*"
+          }
+        ],
+        "allow_methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+      }
+    },
+    {
+      "name": "ponder-builders-v4",
+      "github": {
+        "repo": "MorpheusAIs/ponder-builders-index",
+        "branch": "main",
+        "deploy_on_push": true
+      },
+      "dockerfile_path": "apps/ponder-builders-v4-base-sepolia/Dockerfile.production",
+      "source_dir": ".",
+      "instance_count": 1,
+      "instance_size_slug": "basic-xxs",
+      "http_port": 42069,
+      "health_check": {
+        "http_path": "/health",
+        "initial_delay_seconds": 120,
+        "period_seconds": 30,
+        "timeout_seconds": 15,
+        "success_threshold": 1,
+        "failure_threshold": 3
+      },
+      "envs": [
+        {
+          "key": "DATABASE_URL",
+          "scope": "RUN_TIME",
+          "type": "SECRET",
+          "value": "${ponder-db.DATABASE_URL}"
+        },
+        {
+          "key": "DATABASE_SCHEMA",
+          "value": "ponder_builders_v4_prod"
+        },
+        {
+          "key": "PONDER_RPC_URL_84532",
+          "scope": "RUN_TIME",
+          "type": "SECRET",
+          "value": "${PONDER_RPC_URL_84532}"
+        },
+        {
+          "key": "BUILDERS_V4_CONTRACT_ADDRESS",
+          "value": "0x6C3401D71CEd4b4fEFD1033EA5F83e9B3E7e4381"
+        },
+        {
+          "key": "BUILDERS_V4_START_BLOCK",
+          "value": "29016947"
+        },
+        {
+          "key": "REWARD_POOL_V4_CONTRACT_ADDRESS",
+          "value": "0x0000000000000000000000000000000000000000"
+        },
+        {
+          "key": "BUILDERS_TREASURY_V2_CONTRACT_ADDRESS",
+          "value": "0x0000000000000000000000000000000000000000"
+        },
+        {
+          "key": "FEE_CONFIG_CONTRACT_ADDRESS",
+          "value": "0x0000000000000000000000000000000000000000"
+        },
+        {
+          "key": "MOR_TOKEN_ADDRESS_BASE_SEPOLIA",
+          "value": "0x5C80Ddd187054E1E4aBBfFCD750498e81d34FfA3"
+        },
+        {
+          "key": "MOR_TOKEN_START_BLOCK_BASE_SEPOLIA",
+          "value": "24869176"
+        },
+        {
+          "key": "NODE_ENV",
+          "value": "production"
+        },
+        {
+          "key": "PONDER_LOG_LEVEL",
+          "value": "info"
+        },
+        {
+          "key": "PORT",
+          "value": "42069"
+        }
+      ],
+      "routes": [
+        {
+          "path": "/builders-v4"
+        }
+      ],
+      "cors": {
+        "allow_origins": [
+          {
+            "prefix": "*"
+          }
+        ],
+        "allow_methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+      }
+    }
+  ]
+}
+

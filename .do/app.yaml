@@ -1,185 +1,171 @@
-name: morpheusai-ponder-monorepo
+name: ponder-builders-index-monorepo
 region: nyc1
 
-alerts:
-- rule: DEPLOYMENT_FAILED
-- rule: DOMAIN_FAILED
+# Shared environment variables for all services
+envs:
+  - key: NODE_ENV
+    value: production
+  - key: PONDER_LOG_LEVEL
+    value: info
+  - key: PORT
+    value: "42069"
 
+# Database configuration - shared PostgreSQL database
 databases:
-- cluster_name: morpheusai-ponder-postgres
-  db_name: ponder_production
-  db_user: ponder_user
-  engine: PG
-  name: ponder-db
-  production: true
-  version: "15"
+  - name: ponder-db
+    engine: PG
+    version: "15"
+    production: true
+    size: db-s-dev-database
 
+# Service 1: Ponder Capital Indexer
 services:
-# PostgreSQL database connection info is automatically injected as DATABASE_URL
+  - name: ponder-capital
+    github:
+      repo: MorpheusAIs/ponder-builders-index
+      branch: main
+      deploy_on_push: true
+    dockerfile_path: apps/ponder-capital/Dockerfile.production
+    source_dir: .
+    environment_slug: node-js
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    http_port: 42069
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 120
+      period_seconds: 30
+      timeout_seconds: 15
+      success_threshold: 1
+      failure_threshold: 3
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        type: SECRET
+        value: ${ponder-db.DATABASE_URL}
+      - key: DATABASE_SCHEMA
+        value: ponder_capital_prod
+      - key: PONDER_RPC_URL_1
+        scope: RUN_TIME
+        type: SECRET
+        value: ${PONDER_RPC_URL_1}
+      - key: PONDER_RPC_URL_42161
+        scope: RUN_TIME
+        type: SECRET
+        value: ${PONDER_RPC_URL_42161}
+    routes:
+      - path: /capital
+    cors:
+      allow_origins:
+        - prefix: "*"
+      allow_methods:
+        - GET
+        - POST
+        - OPTIONS
+      allow_headers:
+        - Content-Type
+        - Authorization
 
-# Ponder Builders Service - Handles Arbitrum & Base chains
-- name: ponder-builders
-  source_dir: /
-  github:
-    repo: BowTiedSwan/ponder-builders-index
-    branch: main
-  build_command: |
-    corepack enable
-    pnpm install --frozen-lockfile
-    cd packages/shared-abis && pnpm build
-  run_command: |
-    cd apps/ponder-builders
-    pnpm start
-  environment_slug: node-js
-  instance_count: 1
-  instance_size_slug: professional-xs  # 1 vCPU, 1 GB RAM
-  http_port: 3000
-  routes:
-  - path: /builders
-    preserve_path_prefix: true
-  health_check:
-    http_path: /health
-    initial_delay_seconds: 30
-    period_seconds: 10
-    timeout_seconds: 5
-    success_threshold: 1
-    failure_threshold: 3
-  envs:
-  - key: NODE_ENV
-    value: production
-  - key: DATABASE_SCHEMA
-    value: ponder_builders_${APP_DOMAIN_HASH}
-  - key: VIEWS_SCHEMA
-    value: ponder_builders_latest
-  - key: PONDER_LOG_LEVEL
-    value: info
-  - key: PONDER_RPC_URL_42161
-    value: "https://arb-mainnet.g.alchemy.com/v2/8hD3GpBjP6k2a5rdlPNSy"
-    type: SECRET
-  - key: PONDER_RPC_URL_8453
-    value: "https://api.noderpc.xyz/rpc-base-mainnet/_M2px5r8-_azU1pKiJUscsbtCPEgnfkl7HBu1egQRvM"
-    type: SECRET
+  # Service 2: Ponder Builders Indexer
+  - name: ponder-builders
+    github:
+      repo: MorpheusAIs/ponder-builders-index
+      branch: main
+      deploy_on_push: true
+    dockerfile_path: apps/ponder-builders/Dockerfile.production
+    source_dir: .
+    environment_slug: node-js
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    http_port: 42069
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 120
+      period_seconds: 30
+      timeout_seconds: 15
+      success_threshold: 1
+      failure_threshold: 3
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        type: SECRET
+        value: ${ponder-db.DATABASE_URL}
+      - key: DATABASE_SCHEMA
+        value: ponder_builders_prod
+      - key: PONDER_RPC_URL_42161
+        scope: RUN_TIME
+        type: SECRET
+        value: ${PONDER_RPC_URL_42161}
+      - key: PONDER_RPC_URL_8453
+        scope: RUN_TIME
+        type: SECRET
+        value: ${PONDER_RPC_URL_8453}
+    routes:
+      - path: /builders
+    cors:
+      allow_origins:
+        - prefix: "*"
+      allow_methods:
+        - GET
+        - POST
+        - OPTIONS
+      allow_headers:
+        - Content-Type
+        - Authorization
 
-# Ponder Capital Service - Handles Ethereum mainnet & Arbitrum capital flows
-- name: ponder-capital
-  source_dir: /
-  github:
-    repo: BowTiedSwan/ponder-builders-index
-    branch: main
-  build_command: |
-    corepack enable
-    pnpm install --frozen-lockfile
-    cd packages/shared-abis && pnpm build
-  run_command: |
-    cd apps/ponder-capital
-    pnpm start
-  environment_slug: node-js
-  instance_count: 1
-  instance_size_slug: professional-xs  # 1 vCPU, 1 GB RAM
-  http_port: 3000
-  routes:
-  - path: /capital
-    preserve_path_prefix: true
-  health_check:
-    http_path: /health
-    initial_delay_seconds: 60  # Capital service needs more time for mainnet sync
-    period_seconds: 10
-    timeout_seconds: 5
-    success_threshold: 1
-    failure_threshold: 3
-  envs:
-  - key: NODE_ENV
-    value: production
-  - key: DATABASE_SCHEMA
-    value: ponder_capital_${APP_DOMAIN_HASH}
-  - key: VIEWS_SCHEMA
-    value: ponder_capital_latest
-  - key: PONDER_LOG_LEVEL
-    value: info
-  - key: PONDER_RPC_URL_1
-    value: "https://api.noderpc.xyz/rpc-mainnet/_M2px5r8-_azU1pKiJUscsbtCPEgnfkl7HBu1egQRvM"
-    type: SECRET
-  - key: PONDER_RPC_URL_42161
-    value: "https://arb-mainnet.g.alchemy.com/v2/8hD3GpBjP6k2a5rdlPNSy"
-    type: SECRET
-
-# Apollo Federation Gateway - GraphQL API aggregation
-- name: apollo-gateway
-  source_dir: /
-  github:
-    repo: BowTiedSwan/ponder-builders-index
-    branch: main
-  build_command: |
-    corepack enable
-    pnpm install --frozen-lockfile
-    cd gateway/apollo-federation && pnpm build
-  run_command: |
-    cd gateway/apollo-federation
-    pnpm start
-  environment_slug: node-js
-  instance_count: 1
-  instance_size_slug: basic-xxs  # 0.5 vCPU, 0.5 GB RAM
-  http_port: 4000
-  routes:
-  - path: /graphql
-    preserve_path_prefix: false
-  - path: /
-  health_check:
-    http_path: /health
-    initial_delay_seconds: 10
-    period_seconds: 10
-    timeout_seconds: 5
-    success_threshold: 1
-    failure_threshold: 3
-  envs:
-  - key: NODE_ENV
-    value: production
-  - key: PONDER_BUILDERS_ENDPOINT
-    value: ${ponder-builders.PRIVATE_URL}/graphql
-  - key: PONDER_CAPITAL_ENDPOINT
-    value: ${ponder-capital.PRIVATE_URL}/graphql
-  - key: APOLLO_GRAPH_VARIANT
-    value: production
-
-# Removed redundant SQL API - main services serve both GraphQL and SQL
-
-# Jobs for database maintenance
-jobs:
-- name: db-create-views-builders
-  source_dir: /  # Use workspace root for pnpm
-  github:
-    repo: BowTiedSwan/ponder-builders-index
-    branch: main
-  build_command: |
-    cd /workspace
-    corepack enable
-    pnpm install --frozen-lockfile
-    cd packages/shared-abis && pnpm build
-  run_command: cd apps/ponder-builders && pnpm exec ponder db create-views --schema=ponder_builders_${APP_DOMAIN_HASH} --views-schema=ponder_builders_latest
-  environment_slug: node-js
-  instance_size_slug: basic-xxs
-  kind: POST_DEPLOY
-  envs:
-  - key: NODE_ENV
-    value: production
-
-- name: db-create-views-capital
-  source_dir: /  # Use workspace root for pnpm
-  github:
-    repo: BowTiedSwan/ponder-builders-index
-    branch: main
-  build_command: |
-    cd /workspace
-    corepack enable
-    pnpm install --frozen-lockfile
-    cd packages/shared-abis && pnpm build
-  run_command: cd apps/ponder-capital && pnpm exec ponder db create-views --schema=ponder_capital_${APP_DOMAIN_HASH} --views-schema=ponder_capital_latest
-  environment_slug: node-js
-  instance_size_slug: basic-xxs
-  kind: POST_DEPLOY
-  envs:
-  - key: NODE_ENV
-    value: production
-
-# Static documentation site removed due to buildpack detection issues
-# Documentation is available in the /docs directory of the repository
+  # Service 3: Ponder Builders V4 (Base Sepolia) Indexer
+  - name: ponder-builders-v4
+    github:
+      repo: MorpheusAIs/ponder-builders-index
+      branch: main
+      deploy_on_push: true
+    dockerfile_path: apps/ponder-builders-v4-base-sepolia/Dockerfile.production
+    source_dir: .
+    environment_slug: node-js
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    http_port: 42069
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 120
+      period_seconds: 30
+      timeout_seconds: 15
+      success_threshold: 1
+      failure_threshold: 3
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        type: SECRET
+        value: ${ponder-db.DATABASE_URL}
+      - key: DATABASE_SCHEMA
+        value: ponder_builders_v4_prod
+      - key: PONDER_RPC_URL_84532
+        scope: RUN_TIME
+        type: SECRET
+        value: ${PONDER_RPC_URL_84532}
+      - key: BUILDERS_V4_CONTRACT_ADDRESS
+        value: "0x6C3401D71CEd4b4fEFD1033EA5F83e9B3E7e4381"
+      - key: BUILDERS_V4_START_BLOCK
+        value: "29016947"
+      - key: REWARD_POOL_V4_CONTRACT_ADDRESS
+        value: "0x0000000000000000000000000000000000000000"
+      - key: BUILDERS_TREASURY_V2_CONTRACT_ADDRESS
+        value: "0x0000000000000000000000000000000000000000"
+      - key: FEE_CONFIG_CONTRACT_ADDRESS
+        value: "0x0000000000000000000000000000000000000000"
+      - key: MOR_TOKEN_ADDRESS_BASE_SEPOLIA
+        value: "0x5C80Ddd187054E1E4aBBfFCD750498e81d34FfA3"
+      - key: MOR_TOKEN_START_BLOCK_BASE_SEPOLIA
+        value: "24869176"
+    routes:
+      - path: /builders-v4
+    cors:
+      allow_origins:
+        - prefix: "*"
+      allow_methods:
+        - GET
+        - POST
+        - OPTIONS
+      allow_headers:
+        - Content-Type
+        - Authorization

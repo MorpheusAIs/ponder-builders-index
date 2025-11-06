@@ -216,3 +216,5 @@ echo "Public IP: $PUBLIC_IP" >> /var/log/monitoring-setup.log
 # Final status message
 echo "Setup complete! Monitoring stack is available at http://$PUBLIC_IP:3001"
 
+
+

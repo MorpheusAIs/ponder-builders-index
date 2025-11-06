@@ -12,21 +12,21 @@ RUN npm install -g pnpm@8
 COPY package*.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/shared-abis/package.json ./packages/shared-abis/
 COPY packages/shared-types/package.json ./packages/shared-types/
-COPY apps/ponder-builders/package.json ./apps/ponder-builders/
+COPY apps/ponder-builders-v4-base-sepolia/package.json ./apps/ponder-builders-v4-base-sepolia/
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile --production=false
 
 # Copy source code
 COPY packages/ ./packages/
-COPY apps/ponder-builders/ ./apps/ponder-builders/
+COPY apps/ponder-builders-v4-base-sepolia/ ./apps/ponder-builders-v4-base-sepolia/
 
 # Build shared packages first
 RUN pnpm --filter @morpheusai/shared-abis build
 RUN pnpm --filter @morpheusai/shared-types build
 
-# Build the ponder-builders app
-RUN pnpm --filter @morpheusai/ponder-builders build
+# Build the ponder-builders-v4-base-sepolia app
+RUN pnpm --filter @morpheusai/ponder-builders-v4-base-sepolia build
 
 # Production stage
 FROM node:18-alpine AS production
@@ -48,16 +48,16 @@ RUN npm install -g pnpm@8
 COPY package*.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/shared-abis/package.json ./packages/shared-abis/
 COPY packages/shared-types/package.json ./packages/shared-types/
-COPY apps/ponder-builders/package.json ./apps/ponder-builders/
+COPY apps/ponder-builders-v4-base-sepolia/package.json ./apps/ponder-builders-v4-base-sepolia/
 
 # Install production dependencies only
 RUN pnpm install --frozen-lockfile --production=true
 
 # Copy built application
 COPY --from=builder --chown=ponder:ponder /workspace/packages/ ./packages/
-COPY --from=builder --chown=ponder:ponder /workspace/apps/ponder-builders/dist ./apps/ponder-builders/dist
-COPY --from=builder --chown=ponder:ponder /workspace/apps/ponder-builders/ponder.* ./apps/ponder-builders/
-COPY --from=builder --chown=ponder:ponder /workspace/apps/ponder-builders/src ./apps/ponder-builders/src
+COPY --from=builder --chown=ponder:ponder /workspace/apps/ponder-builders-v4-base-sepolia/dist ./apps/ponder-builders-v4-base-sepolia/dist
+COPY --from=builder --chown=ponder:ponder /workspace/apps/ponder-builders-v4-base-sepolia/ponder.* ./apps/ponder-builders-v4-base-sepolia/
+COPY --from=builder --chown=ponder:ponder /workspace/apps/ponder-builders-v4-base-sepolia/src ./apps/ponder-builders-v4-base-sepolia/src
 
 # Set ownership
 RUN chown -R ponder:ponder /app
@@ -73,7 +73,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD node -e "require('http').get('http://localhost:42069/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"
 
 # Set working directory to the app
-WORKDIR /app/apps/ponder-builders
+WORKDIR /app/apps/ponder-builders-v4-base-sepolia
 
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]
@@ -81,6 +81,3 @@ ENTRYPOINT ["dumb-init", "--"]
 # Start the application with schema support for zero-downtime deployments
 # If DATABASE_SCHEMA is set, use it; otherwise use default
 CMD ["sh", "-c", "if [ -n \"$DATABASE_SCHEMA\" ]; then pnpm start --schema $DATABASE_SCHEMA; else pnpm start; fi"]
-
-
-
