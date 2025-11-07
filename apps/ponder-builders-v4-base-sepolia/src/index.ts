@@ -324,7 +324,15 @@ ponder.on("MorToken:Transfer", async ({ event, context }: any) => {
   
   // Check if this transfer is related to builders staking
   // (i.e., to/from the Builders contract address)
-  const buildersAddress = process.env.BUILDERS_V4_CONTRACT_ADDRESS || "0x0000000000000000000000000000000000000000";
+  // Get the address from contract configuration to ensure it's always valid
+  const buildersAddress = context.contracts.BuildersV4.address;
+  
+  if (!buildersAddress || buildersAddress === "0x0000000000000000000000000000000000000000") {
+    throw new Error(
+      "BUILDERS_V4_CONTRACT_ADDRESS is not configured or is set to zero address. " +
+      "Please set BUILDERS_V4_CONTRACT_ADDRESS environment variable to a valid contract address."
+    );
+  }
   
   const isStakingRelated = 
     isAddressEqual(to as `0x${string}`, buildersAddress as `0x${string}`) || 
