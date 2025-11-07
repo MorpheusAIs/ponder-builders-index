@@ -1,0 +1,83 @@
+name: builders-v4-index
+region: nyc1
+
+# Database configuration - dedicated PostgreSQL database for builders-v4
+# Note: If using an existing database, remove this section and reference it via environment variable
+databases:
+  - name: builders-v4-db
+    engine: PG
+    version: "15"
+    production: false
+    size: db-s-dev-database
+
+# Service: Builders V4 Base Sepolia Indexer
+services:
+  - name: builders-v4
+    github:
+      repo: MorpheusAIs/ponder-builders-index
+      branch: main
+      deploy_on_push: true
+    dockerfile_path: apps/ponder-builders-v4-base-sepolia/Dockerfile.production
+    source_dir: .
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    http_port: 42069
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 120
+      period_seconds: 30
+      timeout_seconds: 15
+      success_threshold: 1
+      failure_threshold: 3
+    envs:
+      # Database connection - auto-populated from database component
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        type: SECRET
+        value: ${builders-v4-db.DATABASE_URL}
+      # Database schema - use deployment ID for zero-downtime deployments
+      - key: DATABASE_SCHEMA
+        scope: RUN_TIME
+        value: ${APP_DEPLOYMENT_ID}
+      # RPC Configuration - Base Sepolia
+      - key: PONDER_RPC_URL_84532
+        scope: RUN_TIME
+        type: SECRET
+        value: ${PONDER_RPC_URL_84532}
+      # Logging
+      - key: PONDER_LOG_LEVEL
+        scope: RUN_TIME
+        value: info
+      # Contract Addresses (optional - defaults are in ponder.config.ts)
+      - key: BUILDERS_V4_CONTRACT_ADDRESS
+        scope: RUN_TIME
+        value: "0x6C3401D71CEd4b4fEFD1033EA5F83e9B3E7e4381"
+      - key: BUILDERS_V4_START_BLOCK
+        scope: RUN_TIME
+        value: "29016947"
+      - key: REWARD_POOL_V4_CONTRACT_ADDRESS
+        scope: RUN_TIME
+        value: "0x0000000000000000000000000000000000000000"
+      - key: BUILDERS_TREASURY_V2_CONTRACT_ADDRESS
+        scope: RUN_TIME
+        value: "0x0000000000000000000000000000000000000000"
+      - key: FEE_CONFIG_CONTRACT_ADDRESS
+        scope: RUN_TIME
+        value: "0x0000000000000000000000000000000000000000"
+      - key: MOR_TOKEN_ADDRESS_BASE_SEPOLIA
+        scope: RUN_TIME
+        value: "0x5C80Ddd187054E1E4aBBfFCD750498e81d34FfA3"
+      - key: MOR_TOKEN_START_BLOCK_BASE_SEPOLIA
+        scope: RUN_TIME
+        value: "24869176"
+    cors:
+      allow_origins:
+        - prefix: "*"
+      allow_methods:
+        - GET
+        - POST
+        - OPTIONS
+      allow_headers:
+        - Content-Type
+        - Authorization
+
