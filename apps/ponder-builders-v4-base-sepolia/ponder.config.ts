@@ -8,6 +8,18 @@ import { BuildersV4Abi, RewardPoolV4Abi, FeeConfigAbi, BuildersTreasuryV2Abi } f
 import { ERC20Abi } from "../../packages/shared-abis/src/index.js";
 
 export default createConfig({
+  // Database configuration: Use Postgres if DATABASE_URL is provided, otherwise use PGlite for local dev
+  ...(process.env.DATABASE_URL
+    ? {
+        database: {
+          kind: "postgres",
+          connectionString: process.env.DATABASE_URL,
+          poolConfig: {
+            max: 30,
+          },
+        },
+      }
+    : {}),
   chains: {
     baseSepolia: {
       id: 84532,

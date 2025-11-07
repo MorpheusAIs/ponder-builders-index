@@ -15,7 +15,7 @@ databases:
   - name: ponder-db
     engine: PG
     version: "15"
-    production: true
+    production: false
     size: db-s-dev-database
 
 # Service 1: Ponder Capital Indexer
@@ -27,7 +27,6 @@ services:
       deploy_on_push: true
     dockerfile_path: apps/ponder-capital/Dockerfile.production
     source_dir: .
-    environment_slug: node-js
     instance_count: 1
     instance_size_slug: basic-xxs
     http_port: 42069
@@ -74,7 +73,6 @@ services:
       deploy_on_push: true
     dockerfile_path: apps/ponder-builders/Dockerfile.production
     source_dir: .
-    environment_slug: node-js
     instance_count: 1
     instance_size_slug: basic-xxs
     http_port: 42069
@@ -121,7 +119,6 @@ services:
       deploy_on_push: true
     dockerfile_path: apps/ponder-builders-v4-base-sepolia/Dockerfile.production
     source_dir: .
-    environment_slug: node-js
     instance_count: 1
     instance_size_slug: basic-xxs
     http_port: 42069
