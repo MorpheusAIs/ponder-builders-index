@@ -1,5 +1,5 @@
 import { createConfig } from "ponder";
-import { http } from "viem";
+import { http, type Abi } from "viem";
 import { loadBalance, rateLimit } from "ponder";
 
 // Import v4 contract ABIs
@@ -34,7 +34,7 @@ export default createConfig({
   contracts: {
     // Builders v4 staking contract - deployed on Base Sepolia
     BuildersV4: {
-      abi: BuildersV4Abi,
+      abi: BuildersV4Abi as Abi,
       chain: "baseSepolia",
       address: (process.env.BUILDERS_V4_CONTRACT_ADDRESS || "0x6C3401D71CEd4b4fEFD1033EA5F83e9B3E7e4381") as `0x${string}`,
       startBlock: Number(process.env.BUILDERS_V4_START_BLOCK || "29016947"),
@@ -43,7 +43,7 @@ export default createConfig({
 
     // Reward Pool v4 - handles reward distribution
     RewardPoolV4: {
-      abi: RewardPoolV4Abi,
+      abi: RewardPoolV4Abi as Abi,
       chain: "baseSepolia",
       address: (process.env.REWARD_POOL_V4_CONTRACT_ADDRESS || "0x0000000000000000000000000000000000000000") as `0x${string}`,
       startBlock: Number(process.env.REWARD_POOL_V4_START_BLOCK || "0"),
@@ -51,7 +51,7 @@ export default createConfig({
 
     // Builders Treasury V2 - handles reward distribution to users
     BuildersTreasuryV2: {
-      abi: BuildersTreasuryV2Abi,
+      abi: BuildersTreasuryV2Abi as Abi,
       chain: "baseSepolia",
       address: (process.env.BUILDERS_TREASURY_V2_CONTRACT_ADDRESS || "0x0000000000000000000000000000000000000000") as `0x${string}`,
       startBlock: Number(process.env.BUILDERS_TREASURY_V2_START_BLOCK || "0"),
@@ -59,7 +59,7 @@ export default createConfig({
 
     // Fee Config - proxy contract for fee configuration
     FeeConfig: {
-      abi: FeeConfigAbi,
+      abi: FeeConfigAbi as Abi,
       chain: "baseSepolia",
       address: (process.env.FEE_CONFIG_CONTRACT_ADDRESS || "0x0000000000000000000000000000000000000000") as `0x${string}`,
       startBlock: Number(process.env.FEE_CONFIG_START_BLOCK || "0"),
