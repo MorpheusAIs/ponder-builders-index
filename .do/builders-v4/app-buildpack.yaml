@@ -2,7 +2,6 @@ name: builders-v4-index
 region: nyc1
 
 # Database configuration - reference existing database cluster
-# The database 'builders-v4-db' already exists, so we reference it by cluster_name
 databases:
   - name: builders-v4-db
     cluster_name: builders-v4-db
@@ -10,15 +9,19 @@ databases:
     version: "15"
     production: false
 
-# Service: Builders V4 Base Sepolia Indexer
+# Service: Builders V4 Base Sepolia Indexer (using Buildpacks, not Docker)
 services:
   - name: builders-v4
     github:
       repo: MorpheusAIs/ponder-builders-index
       branch: main
       deploy_on_push: true
-    dockerfile_path: apps/ponder-builders-v4-base-sepolia/Dockerfile.production
+    # Buildpack configuration (no dockerfile_path)
+    # Buildpack will auto-install dependencies at root (monorepo)
+    # Then we build shared packages and the app is ready to run
     source_dir: .
+    build_command: pnpm --filter @morpheusai/shared-abis build
+    run_command: cd apps/ponder-builders-v4-base-sepolia && pnpm start --schema ${DATABASE_SCHEMA:-builders_v4_prod} --views-schema builders_v4
     instance_count: 1
     instance_size_slug: basic-xxs
     http_port: 42069
