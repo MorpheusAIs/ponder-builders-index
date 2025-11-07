@@ -1,7 +1,7 @@
 import { db } from "ponder:api";
 import schema from "ponder:schema";
 import { Hono } from "hono";
-import { client, graphql } from "ponder";
+import { graphql } from "ponder";
 
 const app = new Hono();
 
@@ -9,8 +9,7 @@ const app = new Hono();
 // /health returns 200 immediately after process starts
 // /ready returns 200 when indexing is caught up, 503 during backfill
 
-app.use("/sql/*", client({ db, schema }));
-
+// GraphQL endpoints
 app.use("/", graphql({ db, schema }));
 app.use("/graphql", graphql({ db, schema }));
 
