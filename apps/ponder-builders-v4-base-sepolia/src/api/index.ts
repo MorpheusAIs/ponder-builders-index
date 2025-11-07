@@ -5,26 +5,9 @@ import { client, graphql } from "ponder";
 
 const app = new Hono();
 
-// Health check endpoint for DigitalOcean
-app.get("/health", async (c) => {
-  try {
-    // Simple database connectivity check
-    await db.select().from(schema.buildersProject).limit(1);
-    return c.json({ status: "healthy", timestamp: Date.now() });
-  } catch (error) {
-    return c.json({ status: "unhealthy", error: String(error) }, 503);
-  }
-});
-
-// Ready endpoint - check database connectivity
-app.get("/ready", async (c) => {
-  try {
-    await db.select().from(schema.buildersProject).limit(1);
-    return c.json({ status: "ready", timestamp: Date.now() });
-  } catch (error) {
-    return c.json({ status: "not ready", error: String(error) }, 503);
-  }
-});
+// Note: /health and /ready endpoints are provided automatically by Ponder
+// /health returns 200 immediately after process starts
+// /ready returns 200 when indexing is caught up, 503 during backfill
 
 app.use("/sql/*", client({ db, schema }));
 
