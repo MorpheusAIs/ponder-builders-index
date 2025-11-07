@@ -18,9 +18,10 @@ services:
       deploy_on_push: true
     # Buildpack configuration (no dockerfile_path)
     # Buildpack will auto-install dependencies at root (monorepo)
-    # Then we build shared packages and the app is ready to run
+    # Note: pnpm 10 can read lockfile v9, so version mismatch shouldn't cause issues
+    # Build shared packages - TypeScript will be compiled during build
     source_dir: .
-    build_command: corepack enable && corepack prepare pnpm@9.15.0 --activate && pnpm --filter @morpheusai/shared-abis build
+    build_command: pnpm --filter @morpheusai/shared-abis build
     run_command: cd apps/ponder-builders-v4-base-sepolia && pnpm start --schema ${DATABASE_SCHEMA:-builders_v4_prod} --views-schema builders_v4
     instance_count: 1
     instance_size_slug: basic-xxs
